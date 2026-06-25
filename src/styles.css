@@ -149,10 +149,19 @@
     margin: 8mm;
   }
 
+  html,
   body {
     background: white !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+
+  .min-h-screen {
+    min-height: auto !important;
+    height: auto !important;
   }
 
   .no-print {
