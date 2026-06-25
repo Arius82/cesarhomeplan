@@ -199,7 +199,7 @@ function DayCard({
 function PrintSheet({ user, week, tasks }: { user: UserName; week: string; tasks: WeekTasks }) {
   return (
     <div className="print-sheet hidden">
-      <div style={{ padding: "4mm", fontFamily: "sans-serif", color: "#000" }}>
+      <div style={{ padding: "2mm", fontFamily: "sans-serif", color: "#000" }}>
         <div style={{ textAlign: "center", fontSize: "14pt", fontWeight: "bold", marginBottom: "4mm" }}>
           Uma casa organizada é uma casa feliz 😊
         </div>
