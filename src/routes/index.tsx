@@ -47,6 +47,8 @@ function Index() {
   const [active, setActive] = useState<UserName>("Miguel");
   const [loaded, setLoaded] = useState(false);
   const [printMode, setPrintMode] = useState<"active" | "all">("active");
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
 
   useEffect(() => {
     try {
@@ -59,6 +61,45 @@ function Index() {
   useEffect(() => {
     if (loaded) localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [state, loaded]);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBanner(true);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+
+    if (window.matchMedia("(display-mode: standalone)").matches) {
+      setShowInstallBanner(false);
+    }
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`PWA install outcome: ${outcome}`);
+    setDeferredPrompt(null);
+    setShowInstallBanner(false);
+  };
+
+  const isIOS = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const ua = window.navigator.userAgent;
+    return /iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream;
+  }, []);
+
+  const showIOSNotification = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
+    return isIOS && !isStandalone;
+  }, [isIOS]);
 
   const user = state[active];
 
@@ -171,6 +212,51 @@ function Index() {
             );
           })}
         </div>
+
+        {/* PWA Installation Banner (no-print) */}
+        {(showInstallBanner || showIOSNotification) && (
+          <div 
+            style={{
+              backgroundColor: `${user.customTextColor}08`,
+              borderColor: `${user.customTextColor}20`,
+              color: user.customTextColor
+            }}
+            className="mb-6 rounded-xl border p-4 shadow-sm flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center animate-in fade-in duration-350"
+          >
+            <div className="flex gap-3 items-center">
+              <span className="text-2xl">📱</span>
+              <div>
+                <p className="text-sm font-bold">Instale o Cesar Home Plan no seu aparelho!</p>
+                <p className="text-xs opacity-75 mt-0.5">
+                  {showIOSNotification ? (
+                    "Toque no botão de compartilhar ⎋ e depois selecione 'Adicionar à Tela de Início' ➕."
+                  ) : (
+                    "Tenha acesso super rápido na sua tela inicial, suporte offline e experiência completa de tela cheia."
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 w-full sm:w-auto justify-end">
+              <button
+                onClick={() => {
+                  setShowInstallBanner(false);
+                }}
+                className="px-3 py-1.5 text-xs font-bold opacity-70 hover:opacity-100 hover:bg-background/30 rounded-md transition-all cursor-pointer"
+              >
+                Agora não
+              </button>
+              {!showIOSNotification && (
+                <button
+                  onClick={handleInstallClick}
+                  style={{ backgroundColor: user.customTextColor, color: "#ffffff" }}
+                  className="px-4 py-1.5 text-xs font-bold rounded-md shadow-sm transition-all hover:opacity-90 cursor-pointer"
+                >
+                  Instalar
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Customization Bar */}
         <div 
