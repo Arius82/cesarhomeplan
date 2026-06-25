@@ -213,9 +213,9 @@ export const ICONS = [
   { char: "📚", label: "Livros" },
 ];
 
-export const DEFAULT_USER_SETTINGS: Record<UserName, { theme: UserTheme; icon: string }> = {
-  Miguel: { theme: "blue", icon: "🧹" },
-  Davi: { theme: "emerald", icon: "🪴" },
-  Danelle: { theme: "pink", icon: "🧼" },
-  Eduardo: { theme: "slate", icon: "🏠" },
+export const DEFAULT_USER_SETTINGS: Record<UserName, { theme: UserTheme; icon: string; customBgColor: string; customTextColor: string }> = {
+  Miguel: { theme: "blue", icon: "🧹", customBgColor: "#eff6ff", customTextColor: "#1d4ed8" },
+  Davi: { theme: "emerald", icon: "🪴", customBgColor: "#f0fdf4", customTextColor: "#15803d" },
+  Danelle: { theme: "pink", icon: "🧼", customBgColor: "#fdf2f8", customTextColor: "#be185d" },
+  Eduardo: { theme: "slate", icon: "🏠", customBgColor: "#f8fafc", customTextColor: "#334155" },
 };

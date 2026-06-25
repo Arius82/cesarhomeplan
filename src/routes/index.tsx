@@ -20,6 +20,8 @@ type AppState = Record<
     checked: Record<string, boolean>;
     theme: UserTheme;
     icon: string;
+    customBgColor: string;
+    customTextColor: string;
   }
 >;
 
@@ -34,11 +36,12 @@ function makeInitialState(): AppState {
       checked: {},
       theme: DEFAULT_USER_SETTINGS[u].theme,
       icon: DEFAULT_USER_SETTINGS[u].icon,
+      customBgColor: DEFAULT_USER_SETTINGS[u].customBgColor,
+      customTextColor: DEFAULT_USER_SETTINGS[u].customTextColor,
     };
   }
   return state;
 }
-
 function Index() {
   const [state, setState] = useState<AppState>(makeInitialState);
   const [active, setActive] = useState<UserName>("Miguel");
@@ -58,7 +61,6 @@ function Index() {
   }, [state, loaded]);
 
   const user = state[active];
-  const userTheme = THEMES[user.theme];
 
   const updateUser = (u: UserName, fn: (s: AppState[UserName]) => AppState[UserName]) =>
     setState((prev) => ({ ...prev, [u]: fn(prev[u]) }));
@@ -71,7 +73,6 @@ function Index() {
   const removeTask = (day: DayKey, idx: number) => {
     updateUser(active, (s) => {
       const tasks = { ...s.tasks, [day]: s.tasks[day].filter((_, i) => i !== idx) };
-      const checked = { ...s.checked };
       // Clean up checked keys when a task is removed. 
       // Since tasks are indexed by position, we need to rebuild checked state or clean up appropriately.
       // Rebuilding checked state to shift indices if necessary:
@@ -99,27 +100,9 @@ function Index() {
   };
 
   const setWeek = (week: string) => updateUser(active, (s) => ({ ...s, week }));
-  const setTheme = (theme: UserTheme) => updateUser(active, (s) => ({ ...s, theme }));
   const setIcon = (icon: string) => updateUser(active, (s) => ({ ...s, icon }));
-
-  const progress = useMemo(() => {
-    let total = 0;
-    let completed = 0;
-    for (const d of DAYS) {
-      const dayTasks = user.tasks[d.key];
-      total += dayTasks.length;
-      dayTasks.forEach((_, i) => {
-        if (user.checked[`${d.key}-${i}`]) {
-          completed++;
-        }
-      });
-    }
-    return {
-      total,
-      completed,
-      percent: total > 0 ? Math.round((completed / total) * 100) : 0,
-    };
-  }, [user]);
+  const setCustomBgColor = (color: string) => updateUser(active, (s) => ({ ...s, customBgColor: color }));
+  const setCustomTextColor = (color: string) => updateUser(active, (s) => ({ ...s, customTextColor: color }));
 
   const handlePrintActive = () => {
     setPrintMode("active");
@@ -146,13 +129,17 @@ function Index() {
           <div className="flex gap-2">
             <button
               onClick={handlePrintActive}
-              className={`rounded-md px-4 py-2 text-sm font-semibold transition-all ${userTheme.accentBg} ${userTheme.accentText} shadow hover:opacity-95`}
+              style={{
+                backgroundColor: user.customTextColor,
+                color: "#ffffff"
+              }}
+              className="rounded-md px-4 py-2 text-sm font-semibold transition-all shadow hover:opacity-90 cursor-pointer"
             >
               Imprimir esta planilha (1 pág.)
             </button>
             <button
               onClick={handlePrintAll}
-              className="rounded-md bg-secondary border border-border px-4 py-2 text-sm font-semibold text-secondary-foreground hover:bg-secondary/80 shadow"
+              className="rounded-md bg-secondary border border-border px-4 py-2 text-sm font-semibold text-secondary-foreground hover:bg-secondary/80 shadow cursor-pointer"
             >
               Imprimir todas (4 págs.)
             </button>
@@ -164,17 +151,17 @@ function Index() {
           {USERS.map((u) => {
             const uConfig = state[u];
             const isSelected = active === u;
-            const uTheme = THEMES[uConfig.theme];
             return (
               <button
                 key={u}
                 onClick={() => setActive(u)}
                 style={{
-                  borderBottomColor: isSelected ? uTheme.printBorder : "transparent",
+                  borderBottomColor: isSelected ? uConfig.customTextColor : "transparent",
+                  color: isSelected ? uConfig.customTextColor : undefined,
                 }}
-                className={`-mb-px border-b-2 px-5 py-2.5 text-sm font-bold transition-all flex items-center gap-2 ${
+                className={`-mb-px border-b-2 px-5 py-2.5 text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
                   isSelected
-                    ? `${uTheme.textColor}`
+                    ? ""
                     : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30"
                 }`}
               >
@@ -185,87 +172,100 @@ function Index() {
           })}
         </div>
 
-        {/* Customization Bar & Progress */}
-        <div className={`mb-6 rounded-xl border p-5 shadow-sm transition-all duration-300 ${userTheme.cardBg} ${userTheme.cardBorder} ${userTheme.textColor} flex flex-col md:flex-row gap-6 justify-between items-start md:items-center`}>
-          <div className="flex flex-col gap-4 w-full md:w-auto">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-bold">Semana:</label>
-                <input
-                  value={user.week}
-                  onChange={(e) => setWeek(e.target.value)}
-                  placeholder="ex: 23/06 a 28/06"
-                  className="rounded-md border border-current/25 bg-background px-3 py-1.5 text-sm w-44 focus:outline-none focus:ring-1 focus:ring-current/50"
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold">Figura:</span>
-                <div className="flex flex-wrap gap-1">
-                  {ICONS.map((ic) => (
-                    <button
-                      key={ic.char}
-                      onClick={() => setIcon(ic.char)}
-                      title={ic.label}
-                      className={`h-8 w-8 rounded text-lg flex items-center justify-center transition-all ${
-                        user.icon === ic.char
-                          ? "bg-background shadow border border-current scale-110"
-                          : "hover:bg-background/40 border border-transparent"
-                      }`}
-                    >
-                      {ic.char}
-                    </button>
-                  ))}
-                </div>
-              </div>
+        {/* Customization Bar */}
+        <div 
+          style={{
+            backgroundColor: user.customBgColor,
+            borderColor: `${user.customTextColor}25`,
+            color: user.customTextColor
+          }}
+          className="mb-6 rounded-xl border p-5 shadow-sm transition-all duration-300 flex flex-col gap-4"
+        >
+          <div className="flex flex-wrap items-center gap-6">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-bold">Semana:</label>
+              <input
+                value={user.week}
+                onChange={(e) => setWeek(e.target.value)}
+                placeholder="ex: 23/06 a 28/06"
+                style={{ borderColor: `${user.customTextColor}30` }}
+                className="rounded-md border bg-background px-3 py-1.5 text-sm w-44 focus:outline-none focus:ring-1"
+              />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-bold">Cor do Tema:</span>
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(THEMES).map(([key, cfg]) => {
-                  const themeKey = key as UserTheme;
-                  let dotColor = "bg-blue-500";
-                  if (themeKey === "emerald") dotColor = "bg-emerald-500";
-                  if (themeKey === "amber") dotColor = "bg-amber-500";
-                  if (themeKey === "pink") dotColor = "bg-pink-500";
-                  if (themeKey === "slate") dotColor = "bg-slate-500";
-
-                  return (
-                    <button
-                      key={themeKey}
-                      onClick={() => setTheme(themeKey)}
-                      title={cfg.name}
-                      className={`px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all border ${
-                        user.theme === themeKey
-                          ? "bg-background border-current shadow scale-105"
-                          : "border-current/15 hover:bg-background/40"
-                      }`}
-                    >
-                      <span className={`h-2.5 w-2.5 rounded-full ${dotColor}`}></span>
-                      {cfg.name}
-                    </button>
-                  );
-                })}
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold">Figura:</span>
+              <div className="flex flex-wrap gap-1">
+                {ICONS.map((ic) => (
+                  <button
+                    key={ic.char}
+                    onClick={() => setIcon(ic.char)}
+                    title={ic.label}
+                    className={`h-8 w-8 rounded text-lg flex items-center justify-center transition-all cursor-pointer ${
+                      user.icon === ic.char
+                        ? "bg-background shadow border border-current scale-110"
+                        : "hover:bg-background/40 border border-transparent"
+                    }`}
+                  >
+                    {ic.char}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
 
-          <div className="w-full md:w-64 flex flex-col gap-2">
-            <div className="flex justify-between text-xs font-bold">
-              <span>Progresso da Semana</span>
-              <span>
-                {progress.completed}/{progress.total} ({progress.percent}%)
-              </span>
+          <div className="flex flex-wrap items-center gap-6 border-t border-current/10 pt-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold">Cor de Fundo:</span>
+              <input
+                type="color"
+                value={user.customBgColor}
+                onChange={(e) => setCustomBgColor(e.target.value)}
+                className="h-8 w-8 cursor-pointer rounded border border-current/25 bg-transparent p-0.5"
+              />
             </div>
-            <div className="w-full bg-background/50 border border-current/15 rounded-full h-3 overflow-hidden">
-              <div
-                className="h-full transition-all duration-300"
-                style={{
-                  width: `${progress.percent}%`,
-                  backgroundColor: userTheme.printBorder,
-                }}
-              ></div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold">Cor do Texto/Dia:</span>
+              <input
+                type="color"
+                value={user.customTextColor}
+                onChange={(e) => setCustomTextColor(e.target.value)}
+                className="h-8 w-8 cursor-pointer rounded border border-current/25 bg-transparent p-0.5"
+              />
+            </div>
+
+            <div className="h-6 w-px bg-current/15 hidden md:block"></div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-bold opacity-75">Predefinições:</span>
+              {Object.entries(THEMES).map(([key, cfg]) => {
+                const themeKey = key as UserTheme;
+                let dotColor = "bg-blue-500";
+                if (themeKey === "emerald") dotColor = "bg-emerald-500";
+                if (themeKey === "amber") dotColor = "bg-amber-500";
+                if (themeKey === "pink") dotColor = "bg-pink-500";
+                if (themeKey === "slate") dotColor = "bg-slate-500";
+
+                return (
+                  <button
+                    key={themeKey}
+                    onClick={() => {
+                      updateUser(active, (s) => ({
+                        ...s,
+                        theme: themeKey,
+                        customBgColor: DEFAULT_USER_SETTINGS[active].customBgColor,
+                        customTextColor: DEFAULT_USER_SETTINGS[active].customTextColor
+                      }));
+                    }}
+                    title={cfg.name}
+                    className="px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all border border-current/15 hover:bg-background/40 cursor-pointer"
+                  >
+                    <span className={`h-2 w-2 rounded-full ${dotColor}`}></span>
+                    {cfg.name}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -282,7 +282,8 @@ function Index() {
               onToggle={toggleCheck}
               onAdd={addTask}
               onRemove={removeTask}
-              theme={userTheme}
+              customBgColor={user.customBgColor}
+              customTextColor={user.customTextColor}
             />
           ))}
         </div>
@@ -294,7 +295,8 @@ function Index() {
           user={active}
           week={user.week}
           tasks={user.tasks}
-          theme={userTheme}
+          customBgColor={user.customBgColor}
+          customTextColor={user.customTextColor}
           icon={user.icon}
         />
       </div>
@@ -308,7 +310,8 @@ function Index() {
                 user={u}
                 week={uConfig.week}
                 tasks={uConfig.tasks}
-                theme={THEMES[uConfig.theme]}
+                customBgColor={uConfig.customBgColor}
+                customTextColor={uConfig.customTextColor}
                 icon={uConfig.icon}
               />
             </div>
@@ -327,7 +330,8 @@ function DayCard({
   onToggle,
   onAdd,
   onRemove,
-  theme,
+  customBgColor,
+  customTextColor,
 }: {
   day: DayKey;
   label: string;
@@ -336,12 +340,23 @@ function DayCard({
   onToggle: (d: DayKey, i: number) => void;
   onAdd: (d: DayKey, t: string) => void;
   onRemove: (d: DayKey, i: number) => void;
-  theme: ThemeConfig;
+  customBgColor: string;
+  customTextColor: string;
 }) {
   const [text, setText] = useState("");
   return (
-    <div className={`rounded-xl border p-5 shadow-sm transition-all duration-200 ${theme.cardBg} ${theme.cardBorder} ${theme.textColor}`}>
-      <h3 className="mb-4 border-b pb-2 text-sm font-bold tracking-wide border-current/20 flex items-center justify-between">
+    <div 
+      style={{
+        backgroundColor: customBgColor,
+        borderColor: `${customTextColor}30`,
+        color: customTextColor
+      }}
+      className="rounded-xl border p-5 shadow-sm transition-all duration-200"
+    >
+      <h3 
+        style={{ borderColor: `${customTextColor}20` }}
+        className="mb-4 border-b pb-2 text-sm font-bold tracking-wide flex items-center justify-between"
+      >
         <span>{label}</span>
       </h3>
       <ul className="space-y-3 min-h-[140px]">
@@ -354,12 +369,13 @@ function DayCard({
                 type="checkbox"
                 checked={isChecked}
                 onChange={() => onToggle(day, i)}
-                className={`mt-0.5 h-4 w-4 shrink-0 rounded border-current/30 text-primary transition-colors cursor-pointer ${theme.checkboxAccent}`}
+                style={{ accentColor: customTextColor }}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded cursor-pointer"
               />
               <span className={`flex-1 transition-all ${isChecked ? "opacity-40 line-through" : "font-medium"}`}>{t}</span>
               <button
                 onClick={() => onRemove(day, i)}
-                className="text-xs opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-1 rounded hover:bg-background/50"
+                className="text-xs opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-1 rounded hover:bg-background/50 cursor-pointer"
                 aria-label="Remover tarefa"
               >
                 ✕
@@ -385,11 +401,16 @@ function DayCard({
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Nova tarefa..."
-          className="flex-1 rounded-md border border-current/20 bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-current/50 transition-all placeholder:text-muted-foreground/50"
+          style={{ borderColor: `${customTextColor}20` }}
+          className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 transition-all placeholder:text-muted-foreground/50"
         />
         <button
           type="submit"
-          className={`rounded-md px-3.5 py-1.5 text-sm font-semibold shadow-sm transition-all active:scale-95 ${theme.accentBg} ${theme.accentText}`}
+          style={{
+            backgroundColor: customTextColor,
+            color: "#ffffff"
+          }}
+          className="rounded-md px-3.5 py-1.5 text-sm font-semibold shadow-sm transition-all active:scale-95 hover:opacity-90 cursor-pointer"
         >
           +
         </button>
@@ -402,22 +423,24 @@ function PrintSheet({
   user,
   week,
   tasks,
-  theme,
+  customBgColor,
+  customTextColor,
   icon,
 }: {
   user: UserName;
   week: string;
   tasks: WeekTasks;
-  theme: ThemeConfig;
+  customBgColor: string;
+  customTextColor: string;
   icon: string;
 }) {
   return (
     <div className="print-sheet-content" style={{
       padding: "5mm",
       fontFamily: "system-ui, -apple-system, sans-serif",
-      color: theme.printText,
+      color: customTextColor,
       backgroundColor: "#ffffff",
-      border: `2.5px solid ${theme.printBorder}`,
+      border: `2.5px solid ${customTextColor}`,
       borderRadius: "12px",
       height: "185mm",
       display: "flex",
@@ -432,7 +455,7 @@ function PrintSheet({
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <span style={{ fontSize: "26pt" }}>{icon}</span>
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: "18pt", fontWeight: "900", textTransform: "uppercase", tracking: "0.05em", color: theme.printText }}>
+              <span style={{ fontSize: "18pt", fontWeight: "900", textTransform: "uppercase", tracking: "0.05em", color: customTextColor }}>
                 {user}
               </span>
               <span style={{ fontSize: "8.5pt", color: "#666", fontWeight: "600" }}>
@@ -441,11 +464,11 @@ function PrintSheet({
             </div>
           </div>
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: "13pt", fontWeight: "800", color: theme.printText }}>
+            <div style={{ fontSize: "13pt", fontWeight: "800", color: customTextColor }}>
               Uma casa organizada é uma casa feliz 😊
             </div>
             <div style={{ fontSize: "10pt", color: "#333", marginTop: "4px", fontWeight: "600" }}>
-              Semana: <span style={{ borderBottom: "1.5px solid #888", paddingBottom: "1px", minWidth: "120px", display: "inline-block", textAlign: "center" }}>{week || "   /   a   /   "}</span>
+              Semana: <span style={{ borderBottom: `1.5px solid ${customTextColor}`, paddingBottom: "1px", minWidth: "120px", display: "inline-block", textAlign: "center" }}>{week || "________________"}</span>
             </div>
           </div>
         </div>
@@ -471,7 +494,7 @@ function PrintSheet({
                         width: "33.33%",
                         height: "70mm",
                         verticalAlign: "top",
-                        border: `1.5px solid ${theme.printBorder}`,
+                        border: `1.5px solid ${customTextColor}`,
                         backgroundColor: "#ffffff",
                       }}
                     >
@@ -479,11 +502,11 @@ function PrintSheet({
                         style={{
                           fontWeight: "bold",
                           fontSize: "10.5pt",
-                          color: theme.printText,
+                          color: customTextColor,
                           marginBottom: "3mm",
-                          borderBottom: `2px solid ${theme.printBorder}`,
+                          borderBottom: `2px solid ${customTextColor}`,
                           paddingBottom: "1.5mm",
-                          backgroundColor: theme.printHeaderBg,
+                          backgroundColor: `${customTextColor}15`,
                           paddingLeft: "2.5mm",
                           paddingTop: "1.5mm",
                           borderRadius: "4px",
@@ -516,7 +539,7 @@ function PrintSheet({
                                 display: "inline-block",
                                 width: "11px",
                                 height: "11px",
-                                border: `1.5px solid ${theme.printBorder}`,
+                                border: `1.5px solid ${customTextColor}`,
                                 borderRadius: "2.5px",
                                 marginRight: "6px",
                                 marginTop: "2px",
@@ -538,10 +561,9 @@ function PrintSheet({
       </div>
 
       {/* Footer */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "8pt", color: "#4a5568", borderTop: "1.5px solid #e2e8f0", paddingTop: "2mm" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "8pt", color: "#4a5568", borderTop: `1.5px solid ${customTextColor}30`, paddingTop: "2.5mm" }}>
         <span>Gerado com ❤️ por Cesar Home Plan e Lovable</span>
-        <div style={{ display: "flex", gap: "10mm", fontWeight: "600" }}>
-          <span>Meta da Semana: 🌟 [  ] Alcançada  [  ] Parcial  [  ] Não Alcançada</span>
+        <div style={{ fontWeight: "600" }}>
           <span>Assinatura: ___________________________</span>
         </div>
       </div>
