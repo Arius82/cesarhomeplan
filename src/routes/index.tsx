@@ -152,6 +152,15 @@ function Index() {
     updateUser(active, (s) => ({ ...s, checked: { ...s.checked, [key]: !s.checked[key] } }));
   };
 
+  const editTask = (day: DayKey, idx: number, text: string) => {
+    if (!text.trim()) return;
+    updateUser(active, (s) => {
+      const tasks = { ...s.tasks };
+      tasks[day] = tasks[day].map((t, i) => (i === idx ? text.trim() : t));
+      return { ...s, tasks };
+    });
+  };
+
   const setWeek = (week: string) => updateUser(active, (s) => ({ ...s, week }));
   const setIcon = (icon: string) => updateUser(active, (s) => ({ ...s, icon }));
   const setCustomBgColor = (color: string) => updateUser(active, (s) => ({ ...s, customBgColor: color }));
@@ -380,6 +389,7 @@ function Index() {
               onToggle={toggleCheck}
               onAdd={addTask}
               onRemove={removeTask}
+              onEdit={editTask}
               customBgColor={user.customBgColor}
               customTextColor={user.customTextColor}
             />
@@ -420,6 +430,105 @@ function Index() {
   );
 }
 
+function TaskItem({
+  day,
+  idx,
+  text,
+  isChecked,
+  customTextColor,
+  onToggle,
+  onRemove,
+  onEdit,
+}: {
+  day: DayKey;
+  idx: number;
+  text: string;
+  isChecked: boolean;
+  customTextColor: string;
+  onToggle: (d: DayKey, i: number) => void;
+  onRemove: (d: DayKey, i: number) => void;
+  onEdit: (d: DayKey, i: number, t: string) => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(text);
+
+  useEffect(() => {
+    setEditText(text);
+  }, [text]);
+
+  const handleSave = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (editText.trim() && editText.trim() !== text) {
+      onEdit(day, idx, editText.trim());
+    }
+    setIsEditing(false);
+  };
+
+  if (isEditing) {
+    return (
+      <form onSubmit={handleSave} className="flex items-center gap-2 w-full py-0.5">
+        <input
+          value={editText}
+          onChange={(e) => setEditText(e.target.value)}
+          className="flex-1 rounded border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 text-foreground"
+          autoFocus
+        />
+        <button
+          type="submit"
+          className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded cursor-pointer"
+          title="Salvar"
+        >
+          ✓
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setEditText(text);
+            setIsEditing(false);
+          }}
+          className="p-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded cursor-pointer"
+          title="Cancelar"
+        >
+          ✕
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <li className="flex items-center gap-2.5 text-sm group min-h-[32px] py-1 border-b border-border/20 last:border-b-0">
+      <input
+        type="checkbox"
+        checked={isChecked}
+        onChange={() => onToggle(day, idx)}
+        style={{ accentColor: customTextColor }}
+        className="h-4 w-4 shrink-0 rounded cursor-pointer"
+      />
+      <span className={`flex-1 transition-all ${isChecked ? "opacity-40 line-through" : "font-medium text-foreground"}`}>
+        {text}
+      </span>
+      <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={() => setIsEditing(true)}
+          className="text-muted-foreground hover:text-primary p-1 rounded hover:bg-muted/50 cursor-pointer text-xs"
+          title="Editar tarefa"
+          aria-label="Editar tarefa"
+        >
+          ✏️
+        </button>
+        <button
+          onClick={() => onRemove(day, idx)}
+          className="text-muted-foreground hover:text-destructive p-1 rounded hover:bg-muted/50 cursor-pointer text-xs"
+          title="Excluir tarefa"
+          aria-label="Excluir tarefa"
+        >
+          🗑️
+        </button>
+      </div>
+    </li>
+  );
+}
+
 function DayCard({
   day,
   label,
@@ -428,6 +537,7 @@ function DayCard({
   onToggle,
   onAdd,
   onRemove,
+  onEdit,
   customBgColor,
   customTextColor,
 }: {
@@ -438,6 +548,7 @@ function DayCard({
   onToggle: (d: DayKey, i: number) => void;
   onAdd: (d: DayKey, t: string) => void;
   onRemove: (d: DayKey, i: number) => void;
+  onEdit: (d: DayKey, i: number, t: string) => void;
   customBgColor: string;
   customTextColor: string;
 }) {
@@ -460,23 +571,17 @@ function DayCard({
           const key = `${day}-${i}`;
           const isChecked = !!checked[key];
           return (
-            <li key={i} className="flex items-start gap-2.5 text-sm group">
-              <input
-                type="checkbox"
-                checked={isChecked}
-                onChange={() => onToggle(day, i)}
-                style={{ accentColor: customTextColor }}
-                className="mt-0.5 h-4 w-4 shrink-0 rounded cursor-pointer"
-              />
-              <span className={`flex-1 transition-all ${isChecked ? "opacity-40 line-through" : "font-medium"}`}>{t}</span>
-              <button
-                onClick={() => onRemove(day, i)}
-                className="text-xs opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-1 rounded hover:bg-background/50 cursor-pointer"
-                aria-label="Remover tarefa"
-              >
-                ✕
-              </button>
-            </li>
+            <TaskItem
+              key={key}
+              day={day}
+              idx={i}
+              text={t}
+              isChecked={isChecked}
+              customTextColor={customTextColor}
+              onToggle={onToggle}
+              onRemove={onRemove}
+              onEdit={onEdit}
+            />
           );
         })}
         {tasks.length === 0 && (
