@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { DAYS, INITIAL_TASKS, USERS, type DayKey, type UserName, type WeekTasks, type UserTheme, THEMES, ICONS, DEFAULT_USER_SETTINGS } from "@/lib/initial-tasks";
+import { DAYS, INITIAL_TASKS, USERS, type DayKey, type UserName, type WeekTasks, type UserTheme, THEMES, ICONS, DEFAULT_USER_SETTINGS, PRESET_COLORS } from "@/lib/initial-tasks";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -42,6 +42,7 @@ function makeInitialState(): AppState {
   }
   return state;
 }
+
 function Index() {
   const [state, setState] = useState<AppState>(makeInitialState);
   const [active, setActive] = useState<UserName>("Miguel");
@@ -53,7 +54,21 @@ function Index() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setState({ ...makeInitialState(), ...JSON.parse(raw) });
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const newState = makeInitialState();
+        for (const u of USERS) {
+          if (parsed[u]) {
+            newState[u] = {
+              ...newState[u],
+              ...parsed[u],
+              customBgColor: parsed[u].customBgColor || DEFAULT_USER_SETTINGS[u].customBgColor,
+              customTextColor: parsed[u].customTextColor || DEFAULT_USER_SETTINGS[u].customTextColor,
+            };
+          }
+        }
+        setState(newState);
+      }
     } catch {}
     setLoaded(true);
   }, []);
@@ -114,9 +129,6 @@ function Index() {
   const removeTask = (day: DayKey, idx: number) => {
     updateUser(active, (s) => {
       const tasks = { ...s.tasks, [day]: s.tasks[day].filter((_, i) => i !== idx) };
-      // Clean up checked keys when a task is removed. 
-      // Since tasks are indexed by position, we need to rebuild checked state or clean up appropriately.
-      // Rebuilding checked state to shift indices if necessary:
       const newChecked = {} as Record<string, boolean>;
       Object.entries(s.checked).forEach(([k, val]) => {
         const [dKey, iStr] = k.split("-");
@@ -261,7 +273,7 @@ function Index() {
         {/* Customization Bar */}
         <div 
           style={{
-            backgroundColor: user.customBgColor,
+            backgroundColor: `${user.customTextColor}08`,
             borderColor: `${user.customTextColor}25`,
             color: user.customTextColor
           }}
@@ -302,7 +314,7 @@ function Index() {
 
           <div className="flex flex-wrap items-center gap-6 border-t border-current/10 pt-4">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-bold">Cor de Fundo:</span>
+              <span className="text-sm font-bold">Cor de Fundo do Dia:</span>
               <input
                 type="color"
                 value={user.customBgColor}
@@ -312,7 +324,7 @@ function Index() {
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-sm font-bold">Cor do Texto/Dia:</span>
+              <span className="text-sm font-bold">Cor da Letra do Dia:</span>
               <input
                 type="color"
                 value={user.customTextColor}
@@ -340,8 +352,8 @@ function Index() {
                       updateUser(active, (s) => ({
                         ...s,
                         theme: themeKey,
-                        customBgColor: DEFAULT_USER_SETTINGS[active].customBgColor,
-                        customTextColor: DEFAULT_USER_SETTINGS[active].customTextColor
+                        customBgColor: PRESET_COLORS[themeKey].bg,
+                        customTextColor: PRESET_COLORS[themeKey].text
                       }));
                     }}
                     title={cfg.name}
@@ -431,19 +443,17 @@ function DayCard({
 }) {
   const [text, setText] = useState("");
   return (
-    <div 
-      style={{
-        backgroundColor: customBgColor,
-        borderColor: `${customTextColor}30`,
-        color: customTextColor
-      }}
-      className="rounded-xl border p-5 shadow-sm transition-all duration-200"
-    >
+    <div className="rounded-xl border border-border bg-card p-5 shadow-sm transition-all duration-200 text-card-foreground">
+      {/* Only the header has custom background and text color */}
       <h3 
-        style={{ borderColor: `${customTextColor}20` }}
-        className="mb-4 border-b pb-2 text-sm font-bold tracking-wide flex items-center justify-between"
+        style={{
+          backgroundColor: customBgColor,
+          color: customTextColor,
+          borderColor: `${customTextColor}30`
+        }}
+        className="mb-4 -mx-5 -mt-5 p-3 text-center text-sm font-extrabold tracking-wider rounded-t-xl border-b"
       >
-        <span>{label}</span>
+        {label}
       </h3>
       <ul className="space-y-3 min-h-[140px]">
         {tasks.map((t, i) => {
@@ -488,7 +498,7 @@ function DayCard({
           onChange={(e) => setText(e.target.value)}
           placeholder="Nova tarefa..."
           style={{ borderColor: `${customTextColor}20` }}
-          className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 transition-all placeholder:text-muted-foreground/50"
+          className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 transition-all placeholder:text-muted-foreground/50 text-foreground"
         />
         <button
           type="submit"
@@ -524,9 +534,9 @@ function PrintSheet({
     <div className="print-sheet-content" style={{
       padding: "5mm",
       fontFamily: "system-ui, -apple-system, sans-serif",
-      color: customTextColor,
+      color: "#0f172a",
       backgroundColor: "#ffffff",
-      border: `2.5px solid ${customTextColor}`,
+      border: `2.5px solid #1e293b`,
       borderRadius: "12px",
       height: "185mm",
       display: "flex",
@@ -541,20 +551,20 @@ function PrintSheet({
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <span style={{ fontSize: "26pt" }}>{icon}</span>
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: "18pt", fontWeight: "900", textTransform: "uppercase", tracking: "0.05em", color: customTextColor }}>
+              <span style={{ fontSize: "18pt", fontWeight: "900", textTransform: "uppercase", tracking: "0.05em", color: "#1e293b" }}>
                 {user}
               </span>
-              <span style={{ fontSize: "8.5pt", color: "#666", fontWeight: "600" }}>
+              <span style={{ fontSize: "8.5pt", color: "#64748b", fontWeight: "600" }}>
                 Cronograma de Tarefas Semanais
               </span>
             </div>
           </div>
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: "13pt", fontWeight: "800", color: customTextColor }}>
+            <div style={{ fontSize: "13pt", fontWeight: "800", color: "#1e293b" }}>
               Uma casa organizada é uma casa feliz 😊
             </div>
-            <div style={{ fontSize: "10pt", color: "#333", marginTop: "4px", fontWeight: "600" }}>
-              Semana: <span style={{ borderBottom: `1.5px solid ${customTextColor}`, paddingBottom: "1px", minWidth: "120px", display: "inline-block", textAlign: "center" }}>{week || "________________"}</span>
+            <div style={{ fontSize: "10pt", color: "#0f172a", marginTop: "4px", fontWeight: "600" }}>
+              Semana: <span style={{ borderBottom: `1.5px solid #1e293b`, paddingBottom: "1px", minWidth: "120px", display: "inline-block", textAlign: "center" }}>{week || "________________"}</span>
             </div>
           </div>
         </div>
@@ -580,19 +590,22 @@ function PrintSheet({
                         width: "33.33%",
                         height: "70mm",
                         verticalAlign: "top",
-                        border: `1.5px solid ${customTextColor}`,
+                        border: `1.5px solid #475569`,
                         backgroundColor: "#ffffff",
                       }}
                     >
+                      {/* ONLY the header of each day has the custom bg and text color */}
                       <div
                         style={{
                           fontWeight: "bold",
                           fontSize: "10.5pt",
                           color: customTextColor,
+                          backgroundColor: customBgColor,
+                          WebkitPrintColorAdjust: "exact",
+                          printColorAdjust: "exact",
                           marginBottom: "3mm",
                           borderBottom: `2px solid ${customTextColor}`,
                           paddingBottom: "1.5mm",
-                          backgroundColor: `${customTextColor}15`,
                           paddingLeft: "2.5mm",
                           paddingTop: "1.5mm",
                           borderRadius: "4px",
@@ -612,7 +625,7 @@ function PrintSheet({
                               marginBottom: "1.5mm",
                               display: "flex",
                               alignItems: "flex-start",
-                              borderBottom: t ? "none" : "1px dashed #e2e8f0",
+                              borderBottom: t ? "none" : "1px dashed #cbd5e1",
                               paddingBottom: t ? "0" : "1.5mm",
                               height: "5.5mm",
                               overflow: "hidden",
@@ -625,11 +638,11 @@ function PrintSheet({
                                 display: "inline-block",
                                 width: "11px",
                                 height: "11px",
-                                border: `1.5px solid ${customTextColor}`,
+                                border: `1.5px solid #475569`,
                                 borderRadius: "2.5px",
                                 marginRight: "6px",
                                 marginTop: "2px",
-                                shrink: 0,
+                                flexShrink: 0,
                                 backgroundColor: "#ffffff"
                               }}
                             />
@@ -647,7 +660,7 @@ function PrintSheet({
       </div>
 
       {/* Footer */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "8pt", color: "#4a5568", borderTop: `1.5px solid ${customTextColor}30`, paddingTop: "2.5mm" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "8pt", color: "#475569", borderTop: `1.5px solid #cbd5e1`, paddingTop: "2.5mm" }}>
         <span>Gerado com ❤️ por Cesar Home Plan e Lovable</span>
         <div style={{ fontWeight: "600" }}>
           <span>Assinatura: ___________________________</span>

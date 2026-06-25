@@ -218,4 +218,12 @@ export const DEFAULT_USER_SETTINGS: Record<UserName, { theme: UserTheme; icon: s
   Davi: { theme: "emerald", icon: "🪴", customBgColor: "#f0fdf4", customTextColor: "#15803d" },
   Danelle: { theme: "pink", icon: "🧼", customBgColor: "#fdf2f8", customTextColor: "#be185d" },
   Eduardo: { theme: "slate", icon: "🏠", customBgColor: "#f8fafc", customTextColor: "#334155" },
+};
+
+export const PRESET_COLORS: Record<UserTheme, { bg: string; text: string }> = {
+  blue: { bg: "#eff6ff", text: "#1d4ed8" },
+  emerald: { bg: "#f0fdf4", text: "#15803d" },
+  amber: { bg: "#fffbeb", text: "#b45309" },
+  pink: { bg: "#fdf2f8", text: "#be185d" },
+  slate: { bg: "#f8fafc", text: "#334155" },
 };

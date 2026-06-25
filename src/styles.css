@@ -144,6 +144,11 @@
 }
 
 @media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   @page {
     size: A4 landscape;
     margin: 8mm 10mm;
@@ -155,8 +160,6 @@
     height: auto !important;
     min-height: auto !important;
     overflow: visible !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
   }
 
   .min-h-screen {
