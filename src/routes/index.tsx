@@ -199,36 +199,31 @@ function DayCard({
 function PrintSheet({ user, week, tasks }: { user: UserName; week: string; tasks: WeekTasks }) {
   return (
     <div className="print-sheet hidden">
-      <div style={{ padding: "8mm", fontFamily: "sans-serif", color: "#000" }}>
-        <div style={{ textAlign: "center", fontSize: "16pt", fontWeight: "bold", marginBottom: "6mm" }}>
+      <div style={{ padding: "2mm", fontFamily: "sans-serif", color: "#000" }}>
+        <div style={{ textAlign: "center", fontSize: "14pt", fontWeight: "bold", marginBottom: "4mm" }}>
           Uma casa organizada é uma casa feliz 😊
         </div>
-        <div style={{ fontSize: "14pt", fontWeight: "bold", marginBottom: "2mm" }}>{user}</div>
-        <div style={{ fontSize: "11pt", marginBottom: "5mm" }}>
-          Semana: {week || "________________"}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "3mm" }}>
+          <div style={{ fontSize: "12pt", fontWeight: "bold" }}>{user}</div>
+          <div style={{ fontSize: "10pt" }}>
+            Semana: {week || "________________"}
+          </div>
         </div>
-        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+        <table className="print-table">
           <tbody>
             {[0, 3].map((rowStart) => (
-              <tr key={rowStart}>
+              <tr key={rowStart} style={{ height: "50%" }}>
                 {DAYS.slice(rowStart, rowStart + 3).map((d) => (
-                  <td
-                    key={d.key}
-                    style={{
-                      border: "1px solid #000",
-                      verticalAlign: "top",
-                      padding: "3mm",
-                      width: "33.33%",
-                      height: "85mm",
-                    }}
-                  >
-                    <div style={{ fontWeight: "bold", fontSize: "11pt", marginBottom: "2mm" }}>{d.label}</div>
-                    <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: "10pt", lineHeight: 1.6 }}>
+                  <td key={d.key} className="print-cell" style={{ padding: "2mm", width: "33.33%" }}>
+                    <div style={{ fontWeight: "bold", fontSize: "10pt", marginBottom: "1.5mm", borderBottom: "1px solid #000", paddingBottom: "1mm" }}>
+                      {d.label}
+                    </div>
+                    <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: "9pt", lineHeight: 1.5 }}>
                       {(tasks[d.key].length ? tasks[d.key] : ["", "", "", ""]).map((t, i) => (
-                        <li key={i}>☐ {t}</li>
+                        <li key={i} style={{ marginBottom: "0.5mm" }}>☐ {t}</li>
                       ))}
-                      {Array.from({ length: Math.max(0, 6 - tasks[d.key].length) }).map((_, i) => (
-                        <li key={`blank-${i}`}>☐</li>
+                      {Array.from({ length: Math.max(0, 7 - tasks[d.key].length) }).map((_, i) => (
+                        <li key={`blank-${i}`} style={{ marginBottom: "0.5mm" }}>☐</li>
                       ))}
                     </ul>
                   </td>
