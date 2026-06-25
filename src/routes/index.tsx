@@ -1,6 +1,38 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { DAYS, INITIAL_TASKS, USERS, type DayKey, type UserName, type WeekTasks, type UserTheme, THEMES, ICONS, DEFAULT_USER_SETTINGS, PRESET_COLORS } from "@/lib/initial-tasks";
+import { createServerFn } from "@tanstack/react-start";
+
+let memoryDb: any = null;
+
+export const getTasksServer = createServerFn({ method: "GET" }).handler(async () => {
+  try {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const filePath = path.resolve(process.cwd(), "tasks-db.json");
+    const content = await fs.readFile(filePath, "utf-8");
+    const data = JSON.parse(content);
+    memoryDb = data;
+    return data;
+  } catch (err) {
+    return memoryDb;
+  }
+});
+
+export const saveTasksServer = createServerFn({ method: "POST" })
+  .validator((data: unknown) => data)
+  .handler(async ({ data }) => {
+    memoryDb = data;
+    try {
+      const fs = await import("node:fs/promises");
+      const path = await import("node:path");
+      const filePath = path.resolve(process.cwd(), "tasks-db.json");
+      await fs.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
+    } catch (err) {
+      console.warn("Failed to write tasks to file, using in-memory sync:", err);
+    }
+    return { success: true };
+  });
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -51,31 +83,99 @@ function Index() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        const newState = makeInitialState();
-        for (const u of USERS) {
-          if (parsed[u]) {
-            newState[u] = {
-              ...newState[u],
-              ...parsed[u],
-              customBgColor: parsed[u].customBgColor || DEFAULT_USER_SETTINGS[u].customBgColor,
-              customTextColor: parsed[u].customTextColor || DEFAULT_USER_SETTINGS[u].customTextColor,
-            };
-          }
-        }
-        setState(newState);
-      }
-    } catch {}
-    setLoaded(true);
-  }, []);
+  const [lastSyncedAt, setLastSyncedAt] = useState<number>(0);
+  const lastSyncedRef = useRef<number>(0);
 
   useEffect(() => {
-    if (loaded) localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state, loaded]);
+    lastSyncedRef.current = lastSyncedAt;
+  }, [lastSyncedAt]);
+
+  useEffect(() => {
+    let activeSync = true;
+
+    const initialSync = async () => {
+      try {
+        const serverData = await getTasksServer();
+        if (serverData && serverData.state && serverData.updatedAt) {
+          if (activeSync) {
+            setState(serverData.state);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(serverData.state));
+            setLastSyncedAt(serverData.updatedAt);
+          }
+        } else {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          let localState = makeInitialState();
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              for (const u of USERS) {
+                if (parsed[u]) {
+                  localState[u] = {
+                    ...localState[u],
+                    ...parsed[u],
+                    customBgColor: parsed[u].customBgColor || DEFAULT_USER_SETTINGS[u].customBgColor,
+                    customTextColor: parsed[u].customTextColor || DEFAULT_USER_SETTINGS[u].customTextColor,
+                  };
+                }
+              }
+            } catch {}
+          }
+          const now = Date.now();
+          if (activeSync) {
+            setState(localState);
+            setLastSyncedAt(now);
+          }
+          await saveTasksServer({ state: localState, updatedAt: now });
+        }
+      } catch (err) {
+        console.error("Failed initial sync, falling back to local:", err);
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw && activeSync) {
+          try {
+            const parsed = JSON.parse(raw);
+            const newState = makeInitialState();
+            for (const u of USERS) {
+              if (parsed[u]) {
+                newState[u] = {
+                  ...newState[u],
+                  ...parsed[u],
+                  customBgColor: parsed[u].customBgColor || DEFAULT_USER_SETTINGS[u].customBgColor,
+                  customTextColor: parsed[u].customTextColor || DEFAULT_USER_SETTINGS[u].customTextColor,
+                };
+              }
+            }
+            setState(newState);
+          } catch {}
+        }
+      } finally {
+        if (activeSync) {
+          setLoaded(true);
+        }
+      }
+    };
+
+    initialSync();
+
+    const interval = setInterval(async () => {
+      try {
+        const serverData = await getTasksServer();
+        if (serverData && serverData.state && serverData.updatedAt) {
+          if (serverData.updatedAt > lastSyncedRef.current && activeSync) {
+            setState(serverData.state);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(serverData.state));
+            setLastSyncedAt(serverData.updatedAt);
+          }
+        }
+      } catch (err) {
+        console.warn("Polling sync failed:", err);
+      }
+    }, 4000);
+
+    return () => {
+      activeSync = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -118,8 +218,21 @@ function Index() {
 
   const user = state[active];
 
-  const updateUser = (u: UserName, fn: (s: AppState[UserName]) => AppState[UserName]) =>
-    setState((prev) => ({ ...prev, [u]: fn(prev[u]) }));
+  const updateUser = (u: UserName, fn: (s: AppState[UserName]) => AppState[UserName]) => {
+    setState((prev) => {
+      const nextState = { ...prev, [u]: fn(prev[u]) };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+      
+      const now = Date.now();
+      lastSyncedRef.current = now;
+      setLastSyncedAt(now);
+      saveTasksServer({ state: nextState, updatedAt: now }).catch((err) => {
+        console.error("Failed to sync to server:", err);
+      });
+      
+      return nextState;
+    });
+  };
 
   const addTask = (day: DayKey, text: string) => {
     if (!text.trim()) return;
