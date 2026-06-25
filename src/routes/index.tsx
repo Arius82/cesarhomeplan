@@ -191,11 +191,7 @@ function Index() {
           <div className="flex gap-2">
             <button
               onClick={handlePrintActive}
-              style={{
-                backgroundColor: user.customTextColor,
-                color: "#ffffff"
-              }}
-              className="rounded-md px-4 py-2 text-sm font-semibold transition-all shadow hover:opacity-90 cursor-pointer"
+              className="rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-semibold transition-all shadow hover:bg-primary/95 cursor-pointer"
             >
               Imprimir esta planilha (1 pág.)
             </button>
@@ -217,13 +213,9 @@ function Index() {
               <button
                 key={u}
                 onClick={() => setActive(u)}
-                style={{
-                  borderBottomColor: isSelected ? uConfig.customTextColor : "transparent",
-                  color: isSelected ? uConfig.customTextColor : undefined,
-                }}
                 className={`-mb-px border-b-2 px-5 py-2.5 text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
                   isSelected
-                    ? ""
+                    ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30"
                 }`}
               >
@@ -236,14 +228,7 @@ function Index() {
 
         {/* PWA Installation Banner (no-print) */}
         {(showInstallBanner || showIOSNotification) && (
-          <div 
-            style={{
-              backgroundColor: `${user.customTextColor}08`,
-              borderColor: `${user.customTextColor}20`,
-              color: user.customTextColor
-            }}
-            className="mb-6 rounded-xl border p-4 shadow-sm flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center animate-in fade-in duration-350"
-          >
+          <div className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4 shadow-sm flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center animate-in fade-in duration-350 text-foreground">
             <div className="flex gap-3 items-center">
               <span className="text-2xl">📱</span>
               <div>
@@ -269,8 +254,7 @@ function Index() {
               {!showIOSNotification && (
                 <button
                   onClick={handleInstallClick}
-                  style={{ backgroundColor: user.customTextColor, color: "#ffffff" }}
-                  className="px-4 py-1.5 text-xs font-bold rounded-md shadow-sm transition-all hover:opacity-90 cursor-pointer"
+                  className="px-4 py-1.5 text-xs font-bold rounded-md shadow-sm bg-primary text-primary-foreground transition-all hover:bg-primary/95 cursor-pointer"
                 >
                   Instalar
                 </button>
@@ -280,14 +264,7 @@ function Index() {
         )}
 
         {/* Customization Bar */}
-        <div 
-          style={{
-            backgroundColor: `${user.customTextColor}08`,
-            borderColor: `${user.customTextColor}25`,
-            color: user.customTextColor
-          }}
-          className="mb-6 rounded-xl border p-5 shadow-sm transition-all duration-300 flex flex-col gap-4"
-        >
+        <div className="mb-6 rounded-xl border border-border bg-muted/30 p-5 shadow-sm transition-all duration-300 flex flex-col gap-4 text-foreground">
           <div className="flex flex-wrap items-center gap-6">
             <div className="flex items-center gap-2">
               <label className="text-sm font-bold">Semana:</label>
@@ -295,8 +272,7 @@ function Index() {
                 value={user.week}
                 onChange={(e) => setWeek(e.target.value)}
                 placeholder="ex: 23/06 a 28/06"
-                style={{ borderColor: `${user.customTextColor}30` }}
-                className="rounded-md border bg-background px-3 py-1.5 text-sm w-44 focus:outline-none focus:ring-1"
+                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm w-44 focus:outline-none focus:ring-1 focus:ring-ring"
               />
             </div>
 
@@ -310,7 +286,7 @@ function Index() {
                     title={ic.label}
                     className={`h-8 w-8 rounded text-lg flex items-center justify-center transition-all cursor-pointer ${
                       user.icon === ic.char
-                        ? "bg-background shadow border border-current scale-110"
+                        ? "bg-background shadow border border-border scale-110"
                         : "hover:bg-background/40 border border-transparent"
                     }`}
                   >
@@ -321,14 +297,14 @@ function Index() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-6 border-t border-current/10 pt-4">
+          <div className="flex flex-wrap items-center gap-6 border-t border-border pt-4">
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold">Cor de Fundo do Dia:</span>
               <input
                 type="color"
                 value={user.customBgColor}
                 onChange={(e) => setCustomBgColor(e.target.value)}
-                className="h-8 w-8 cursor-pointer rounded border border-current/25 bg-transparent p-0.5"
+                className="h-8 w-8 cursor-pointer rounded border border-input bg-transparent p-0.5"
               />
             </div>
 
@@ -338,11 +314,11 @@ function Index() {
                 type="color"
                 value={user.customTextColor}
                 onChange={(e) => setCustomTextColor(e.target.value)}
-                className="h-8 w-8 cursor-pointer rounded border border-current/25 bg-transparent p-0.5"
+                className="h-8 w-8 cursor-pointer rounded border border-input bg-transparent p-0.5"
               />
             </div>
 
-            <div className="h-6 w-px bg-current/15 hidden md:block"></div>
+            <div className="h-6 w-px bg-border hidden md:block"></div>
 
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-xs font-bold opacity-75">Predefinições:</span>
@@ -366,7 +342,7 @@ function Index() {
                       }));
                     }}
                     title={cfg.name}
-                    className="px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all border border-current/15 hover:bg-background/40 cursor-pointer"
+                    className="px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all border border-border hover:bg-muted cursor-pointer"
                   >
                     <span className={`h-2 w-2 rounded-full ${dotColor}`}></span>
                     {cfg.name}
@@ -501,8 +477,7 @@ function TaskItem({
         type="checkbox"
         checked={isChecked}
         onChange={() => onToggle(day, idx)}
-        style={{ accentColor: customTextColor }}
-        className="h-4 w-4 shrink-0 rounded cursor-pointer"
+        className="h-4 w-4 shrink-0 rounded cursor-pointer accent-primary"
       />
       <span className={`flex-1 transition-all ${isChecked ? "opacity-40 line-through" : "font-medium text-foreground"}`}>
         {text}
@@ -602,16 +577,11 @@ function DayCard({
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Nova tarefa..."
-          style={{ borderColor: `${customTextColor}20` }}
-          className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 transition-all placeholder:text-muted-foreground/50 text-foreground"
+          className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring transition-all placeholder:text-muted-foreground/50 text-foreground"
         />
         <button
           type="submit"
-          style={{
-            backgroundColor: customTextColor,
-            color: "#ffffff"
-          }}
-          className="rounded-md px-3.5 py-1.5 text-sm font-semibold shadow-sm transition-all active:scale-95 hover:opacity-90 cursor-pointer"
+          className="rounded-md bg-primary text-primary-foreground px-3.5 py-1.5 text-sm font-semibold shadow-sm transition-all active:scale-95 hover:bg-primary/90 cursor-pointer"
         >
           +
         </button>
