@@ -77,14 +77,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "César Home Planner" },
+      { name: "description", content: "Home Task Buddy helps users organize household chores and generate printable task lists." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "César Home Planner" },
+      { property: "og:description", content: "Home Task Buddy helps users organize household chores and generate printable task lists." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "César Home Planner" },
+      { name: "twitter:description", content: "Home Task Buddy helps users organize household chores and generate printable task lists." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/7c135633-a889-42a6-a56b-5d045c82430b/id-preview-8dd2b471--5f14172b-97e3-4bee-8189-62643abd7911.lovable.app-1782393330744.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/7c135633-a889-42a6-a56b-5d045c82430b/id-preview-8dd2b471--5f14172b-97e3-4bee-8189-62643abd7911.lovable.app-1782393330744.png" },
     ],
     links: [
       {
