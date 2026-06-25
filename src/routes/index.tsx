@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { DAYS, INITIAL_TASKS, USERS, type DayKey, type UserName, type WeekTasks } from "@/lib/initial-tasks";
+import { DAYS, INITIAL_TASKS, USERS, type DayKey, type UserName, type WeekTasks, type UserTheme, THEMES, ICONS, DEFAULT_USER_SETTINGS } from "@/lib/initial-tasks";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -12,14 +12,29 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-type AppState = Record<UserName, { week: string; tasks: WeekTasks; checked: Record<string, boolean> }>;
+type AppState = Record<
+  UserName,
+  {
+    week: string;
+    tasks: WeekTasks;
+    checked: Record<string, boolean>;
+    theme: UserTheme;
+    icon: string;
+  }
+>;
 
 const STORAGE_KEY = "casa-organizada-v1";
 
 function makeInitialState(): AppState {
   const state = {} as AppState;
   for (const u of USERS) {
-    state[u] = { week: "", tasks: structuredClone(INITIAL_TASKS[u]), checked: {} };
+    state[u] = {
+      week: "",
+      tasks: structuredClone(INITIAL_TASKS[u]),
+      checked: {},
+      theme: DEFAULT_USER_SETTINGS[u].theme,
+      icon: DEFAULT_USER_SETTINGS[u].icon,
+    };
   }
   return state;
 }
@@ -28,6 +43,7 @@ function Index() {
   const [state, setState] = useState<AppState>(makeInitialState);
   const [active, setActive] = useState<UserName>("Miguel");
   const [loaded, setLoaded] = useState(false);
+  const [printMode, setPrintMode] = useState<"active" | "all">("active");
 
   useEffect(() => {
     try {
@@ -42,6 +58,7 @@ function Index() {
   }, [state, loaded]);
 
   const user = state[active];
+  const userTheme = THEMES[user.theme];
 
   const updateUser = (u: UserName, fn: (s: AppState[UserName]) => AppState[UserName]) =>
     setState((prev) => ({ ...prev, [u]: fn(prev[u]) }));
@@ -55,8 +72,24 @@ function Index() {
     updateUser(active, (s) => {
       const tasks = { ...s.tasks, [day]: s.tasks[day].filter((_, i) => i !== idx) };
       const checked = { ...s.checked };
-      delete checked[`${day}-${idx}`];
-      return { ...s, tasks, checked };
+      // Clean up checked keys when a task is removed. 
+      // Since tasks are indexed by position, we need to rebuild checked state or clean up appropriately.
+      // Rebuilding checked state to shift indices if necessary:
+      const newChecked = {} as Record<string, boolean>;
+      Object.entries(s.checked).forEach(([k, val]) => {
+        const [dKey, iStr] = k.split("-");
+        if (dKey === day) {
+          const index = parseInt(iStr, 10);
+          if (index < idx) {
+            newChecked[k] = val;
+          } else if (index > idx) {
+            newChecked[`${dKey}-${index - 1}`] = val;
+          }
+        } else {
+          newChecked[k] = val;
+        }
+      });
+      return { ...s, tasks, checked: newChecked };
     });
   };
 
@@ -66,47 +99,179 @@ function Index() {
   };
 
   const setWeek = (week: string) => updateUser(active, (s) => ({ ...s, week }));
+  const setTheme = (theme: UserTheme) => updateUser(active, (s) => ({ ...s, theme }));
+  const setIcon = (icon: string) => updateUser(active, (s) => ({ ...s, icon }));
+
+  const progress = useMemo(() => {
+    let total = 0;
+    let completed = 0;
+    for (const d of DAYS) {
+      const dayTasks = user.tasks[d.key];
+      total += dayTasks.length;
+      dayTasks.forEach((_, i) => {
+        if (user.checked[`${d.key}-${i}`]) {
+          completed++;
+        }
+      });
+    }
+    return {
+      total,
+      completed,
+      percent: total > 0 ? Math.round((completed / total) * 100) : 0,
+    };
+  }, [user]);
+
+  const handlePrintActive = () => {
+    setPrintMode("active");
+    setTimeout(() => {
+      window.print();
+    }, 50);
+  };
+
+  const handlePrintAll = () => {
+    setPrintMode("all");
+    setTimeout(() => {
+      window.print();
+    }, 50);
+  };
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className={`min-h-screen bg-background text-foreground print-mode-${printMode}`}>
       <div className="no-print mx-auto max-w-6xl px-4 py-6">
         <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <h1 className="text-2xl font-bold">Uma casa organizada é uma casa feliz 😊</h1>
-          <button
-            onClick={() => window.print()}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            Imprimir planilha (A4)
-          </button>
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">{user.icon}</span>
+            <h1 className="text-2xl font-black tracking-tight">Uma casa organizada é uma casa feliz 😊</h1>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handlePrintActive}
+              className={`rounded-md px-4 py-2 text-sm font-semibold transition-all ${userTheme.accentBg} ${userTheme.accentText} shadow hover:opacity-95`}
+            >
+              Imprimir esta planilha (1 pág.)
+            </button>
+            <button
+              onClick={handlePrintAll}
+              className="rounded-md bg-secondary border border-border px-4 py-2 text-sm font-semibold text-secondary-foreground hover:bg-secondary/80 shadow"
+            >
+              Imprimir todas (4 págs.)
+            </button>
+          </div>
         </header>
 
-        <div className="mb-4 flex flex-wrap gap-2 border-b border-border">
-          {USERS.map((u) => (
-            <button
-              key={u}
-              onClick={() => setActive(u)}
-              className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-                active === u
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {u}
-            </button>
-          ))}
+        {/* User Navigation Tabs */}
+        <div className="mb-6 flex flex-wrap gap-1 border-b border-border">
+          {USERS.map((u) => {
+            const uConfig = state[u];
+            const isSelected = active === u;
+            const uTheme = THEMES[uConfig.theme];
+            return (
+              <button
+                key={u}
+                onClick={() => setActive(u)}
+                style={{
+                  borderBottomColor: isSelected ? uTheme.printBorder : "transparent",
+                }}
+                className={`-mb-px border-b-2 px-5 py-2.5 text-sm font-bold transition-all flex items-center gap-2 ${
+                  isSelected
+                    ? `${uTheme.textColor}`
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                }`}
+              >
+                <span className="text-base">{uConfig.icon}</span>
+                <span>{u}</span>
+              </button>
+            );
+          })}
         </div>
 
-        <div className="mb-4 flex items-center gap-2">
-          <label className="text-sm font-medium">Semana:</label>
-          <input
-            value={user.week}
-            onChange={(e) => setWeek(e.target.value)}
-            placeholder="ex: 23/06 a 28/06"
-            className="rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-          />
+        {/* Customization Bar & Progress */}
+        <div className={`mb-6 rounded-xl border p-5 shadow-sm transition-all duration-300 ${userTheme.cardBg} ${userTheme.cardBorder} ${userTheme.textColor} flex flex-col md:flex-row gap-6 justify-between items-start md:items-center`}>
+          <div className="flex flex-col gap-4 w-full md:w-auto">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-bold">Semana:</label>
+                <input
+                  value={user.week}
+                  onChange={(e) => setWeek(e.target.value)}
+                  placeholder="ex: 23/06 a 28/06"
+                  className="rounded-md border border-current/25 bg-background px-3 py-1.5 text-sm w-44 focus:outline-none focus:ring-1 focus:ring-current/50"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold">Figura:</span>
+                <div className="flex flex-wrap gap-1">
+                  {ICONS.map((ic) => (
+                    <button
+                      key={ic.char}
+                      onClick={() => setIcon(ic.char)}
+                      title={ic.label}
+                      className={`h-8 w-8 rounded text-lg flex items-center justify-center transition-all ${
+                        user.icon === ic.char
+                          ? "bg-background shadow border border-current scale-110"
+                          : "hover:bg-background/40 border border-transparent"
+                      }`}
+                    >
+                      {ic.char}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-bold">Cor do Tema:</span>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(THEMES).map(([key, cfg]) => {
+                  const themeKey = key as UserTheme;
+                  let dotColor = "bg-blue-500";
+                  if (themeKey === "emerald") dotColor = "bg-emerald-500";
+                  if (themeKey === "amber") dotColor = "bg-amber-500";
+                  if (themeKey === "pink") dotColor = "bg-pink-500";
+                  if (themeKey === "slate") dotColor = "bg-slate-500";
+
+                  return (
+                    <button
+                      key={themeKey}
+                      onClick={() => setTheme(themeKey)}
+                      title={cfg.name}
+                      className={`px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all border ${
+                        user.theme === themeKey
+                          ? "bg-background border-current shadow scale-105"
+                          : "border-current/15 hover:bg-background/40"
+                      }`}
+                    >
+                      <span className={`h-2.5 w-2.5 rounded-full ${dotColor}`}></span>
+                      {cfg.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="w-full md:w-64 flex flex-col gap-2">
+            <div className="flex justify-between text-xs font-bold">
+              <span>Progresso da Semana</span>
+              <span>
+                {progress.completed}/{progress.total} ({progress.percent}%)
+              </span>
+            </div>
+            <div className="w-full bg-background/50 border border-current/15 rounded-full h-3 overflow-hidden">
+              <div
+                className="h-full transition-all duration-300"
+                style={{
+                  width: `${progress.percent}%`,
+                  backgroundColor: userTheme.printBorder,
+                }}
+              ></div>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {/* Days Grid */}
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
           {DAYS.map((d) => (
             <DayCard
               key={d.key}
@@ -117,12 +282,39 @@ function Index() {
               onToggle={toggleCheck}
               onAdd={addTask}
               onRemove={removeTask}
+              theme={userTheme}
             />
           ))}
         </div>
       </div>
 
-      <PrintSheet user={active} week={user.week} tasks={user.tasks} />
+      {/* Printable Containers (Always rendered but toggle class hides/shows during printing) */}
+      <div className="print-active-sheet">
+        <PrintSheet
+          user={active}
+          week={user.week}
+          tasks={user.tasks}
+          theme={userTheme}
+          icon={user.icon}
+        />
+      </div>
+
+      <div className="print-all-sheets">
+        {USERS.map((u) => {
+          const uConfig = state[u];
+          return (
+            <div key={u} className="print-page-break">
+              <PrintSheet
+                user={u}
+                week={uConfig.week}
+                tasks={uConfig.tasks}
+                theme={THEMES[uConfig.theme]}
+                icon={uConfig.icon}
+              />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -135,6 +327,7 @@ function DayCard({
   onToggle,
   onAdd,
   onRemove,
+  theme,
 }: {
   day: DayKey;
   label: string;
@@ -143,26 +336,30 @@ function DayCard({
   onToggle: (d: DayKey, i: number) => void;
   onAdd: (d: DayKey, t: string) => void;
   onRemove: (d: DayKey, i: number) => void;
+  theme: ThemeConfig;
 }) {
   const [text, setText] = useState("");
   return (
-    <div className="rounded-lg border border-border bg-card p-4 text-card-foreground shadow-sm">
-      <h3 className="mb-3 border-b border-border pb-2 text-sm font-bold tracking-wide">{label}</h3>
-      <ul className="space-y-2">
+    <div className={`rounded-xl border p-5 shadow-sm transition-all duration-200 ${theme.cardBg} ${theme.cardBorder} ${theme.textColor}`}>
+      <h3 className="mb-4 border-b pb-2 text-sm font-bold tracking-wide border-current/20 flex items-center justify-between">
+        <span>{label}</span>
+      </h3>
+      <ul className="space-y-3 min-h-[140px]">
         {tasks.map((t, i) => {
           const key = `${day}-${i}`;
+          const isChecked = !!checked[key];
           return (
-            <li key={i} className="flex items-start gap-2 text-sm">
+            <li key={i} className="flex items-start gap-2.5 text-sm group">
               <input
                 type="checkbox"
-                checked={!!checked[key]}
+                checked={isChecked}
                 onChange={() => onToggle(day, i)}
-                className="mt-0.5 h-4 w-4 shrink-0"
+                className={`mt-0.5 h-4 w-4 shrink-0 rounded border-current/30 text-primary transition-colors cursor-pointer ${theme.checkboxAccent}`}
               />
-              <span className={`flex-1 ${checked[key] ? "text-muted-foreground line-through" : ""}`}>{t}</span>
+              <span className={`flex-1 transition-all ${isChecked ? "opacity-40 line-through" : "font-medium"}`}>{t}</span>
               <button
                 onClick={() => onRemove(day, i)}
-                className="text-xs text-muted-foreground hover:text-destructive"
+                className="text-xs opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-1 rounded hover:bg-background/50"
                 aria-label="Remover tarefa"
               >
                 ✕
@@ -170,6 +367,11 @@ function DayCard({
             </li>
           );
         })}
+        {tasks.length === 0 && (
+          <li className="text-xs opacity-50 italic flex items-center justify-center h-20">
+            Nenhuma tarefa cadastrada
+          </li>
+        )}
       </ul>
       <form
         onSubmit={(e) => {
@@ -177,17 +379,17 @@ function DayCard({
           onAdd(day, text);
           setText("");
         }}
-        className="mt-3 flex gap-2"
+        className="mt-4 flex gap-2"
       >
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Nova tarefa..."
-          className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-sm"
+          className="flex-1 rounded-md border border-current/20 bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-current/50 transition-all placeholder:text-muted-foreground/50"
         />
         <button
           type="submit"
-          className="rounded-md bg-secondary px-3 py-1 text-sm font-medium text-secondary-foreground hover:bg-secondary/80"
+          className={`rounded-md px-3.5 py-1.5 text-sm font-semibold shadow-sm transition-all active:scale-95 ${theme.accentBg} ${theme.accentText}`}
         >
           +
         </button>
@@ -196,42 +398,152 @@ function DayCard({
   );
 }
 
-function PrintSheet({ user, week, tasks }: { user: UserName; week: string; tasks: WeekTasks }) {
+function PrintSheet({
+  user,
+  week,
+  tasks,
+  theme,
+  icon,
+}: {
+  user: UserName;
+  week: string;
+  tasks: WeekTasks;
+  theme: ThemeConfig;
+  icon: string;
+}) {
   return (
-    <div className="print-sheet hidden">
-      <div style={{ padding: "2mm", fontFamily: "sans-serif", color: "#000" }}>
-        <div style={{ textAlign: "center", fontSize: "14pt", fontWeight: "bold", marginBottom: "4mm" }}>
-          Uma casa organizada é uma casa feliz 😊
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "3mm" }}>
-          <div style={{ fontSize: "12pt", fontWeight: "bold" }}>{user}</div>
-          <div style={{ fontSize: "10pt" }}>
-            Semana: {week || "________________"}
+    <div className="print-sheet-content" style={{
+      padding: "5mm",
+      fontFamily: "system-ui, -apple-system, sans-serif",
+      color: theme.printText,
+      backgroundColor: "#ffffff",
+      border: `2.5px solid ${theme.printBorder}`,
+      borderRadius: "12px",
+      height: "185mm",
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "space-between",
+      boxSizing: "border-box",
+      pageBreakInside: "avoid"
+    }}>
+      <div>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4mm" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "26pt" }}>{icon}</span>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <span style={{ fontSize: "18pt", fontWeight: "900", textTransform: "uppercase", tracking: "0.05em", color: theme.printText }}>
+                {user}
+              </span>
+              <span style={{ fontSize: "8.5pt", color: "#666", fontWeight: "600" }}>
+                Cronograma de Tarefas Semanais
+              </span>
+            </div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: "13pt", fontWeight: "800", color: theme.printText }}>
+              Uma casa organizada é uma casa feliz 😊
+            </div>
+            <div style={{ fontSize: "10pt", color: "#333", marginTop: "4px", fontWeight: "600" }}>
+              Semana: <span style={{ borderBottom: "1.5px solid #888", paddingBottom: "1px", minWidth: "120px", display: "inline-block", textAlign: "center" }}>{week || "   /   a   /   "}</span>
+            </div>
           </div>
         </div>
-        <table className="print-table">
+
+        {/* Table/Grid */}
+        <table style={{ width: "100%", height: "140mm", tableLayout: "fixed", borderCollapse: "collapse" }}>
           <tbody>
             {[0, 3].map((rowStart) => (
-              <tr key={rowStart} style={{ height: "50%" }}>
-                {DAYS.slice(rowStart, rowStart + 3).map((d) => (
-                  <td key={d.key} className="print-cell" style={{ padding: "2mm", width: "33.33%" }}>
-                    <div style={{ fontWeight: "bold", fontSize: "10pt", marginBottom: "1.5mm", borderBottom: "1px solid #000", paddingBottom: "1mm" }}>
-                      {d.label}
-                    </div>
-                    <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: "9pt", lineHeight: 1.5 }}>
-                      {(tasks[d.key].length ? tasks[d.key] : ["", "", "", ""]).map((t, i) => (
-                        <li key={i} style={{ marginBottom: "0.5mm" }}>☐ {t}</li>
-                      ))}
-                      {Array.from({ length: Math.max(0, 7 - tasks[d.key].length) }).map((_, i) => (
-                        <li key={`blank-${i}`} style={{ marginBottom: "0.5mm" }}>☐</li>
-                      ))}
-                    </ul>
-                  </td>
-                ))}
+              <tr key={rowStart}>
+                {DAYS.slice(rowStart, rowStart + 3).map((d) => {
+                  const dayTasks = tasks[d.key];
+                  const displayTasks = [...dayTasks];
+                  const minTasks = 7;
+                  while (displayTasks.length < minTasks) {
+                    displayTasks.push("");
+                  }
+
+                  return (
+                    <td
+                      key={d.key}
+                      style={{
+                        padding: "3.5mm",
+                        width: "33.33%",
+                        height: "70mm",
+                        verticalAlign: "top",
+                        border: `1.5px solid ${theme.printBorder}`,
+                        backgroundColor: "#ffffff",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontWeight: "bold",
+                          fontSize: "10.5pt",
+                          color: theme.printText,
+                          marginBottom: "3mm",
+                          borderBottom: `2px solid ${theme.printBorder}`,
+                          paddingBottom: "1.5mm",
+                          backgroundColor: theme.printHeaderBg,
+                          paddingLeft: "2.5mm",
+                          paddingTop: "1.5mm",
+                          borderRadius: "4px",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center"
+                        }}
+                      >
+                        <span>{d.label}</span>
+                        <span style={{ fontSize: "10pt", opacity: 0.6 }}>{icon}</span>
+                      </div>
+                      <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: "9pt", lineHeight: 1.55 }}>
+                        {displayTasks.map((t, i) => (
+                          <li
+                            key={i}
+                            style={{
+                              marginBottom: "1.5mm",
+                              display: "flex",
+                              alignItems: "flex-start",
+                              borderBottom: t ? "none" : "1px dashed #e2e8f0",
+                              paddingBottom: t ? "0" : "1.5mm",
+                              height: "5.5mm",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap"
+                            }}
+                          >
+                            <span
+                              style={{
+                                display: "inline-block",
+                                width: "11px",
+                                height: "11px",
+                                border: `1.5px solid ${theme.printBorder}`,
+                                borderRadius: "2.5px",
+                                marginRight: "6px",
+                                marginTop: "2px",
+                                shrink: 0,
+                                backgroundColor: "#ffffff"
+                              }}
+                            />
+                            <span style={{ color: t ? "#1a202c" : "transparent" }}>{t || "placeholder"}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Footer */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "8pt", color: "#4a5568", borderTop: "1.5px solid #e2e8f0", paddingTop: "2mm" }}>
+        <span>Gerado com ❤️ por Cesar Home Plan e Lovable</span>
+        <div style={{ display: "flex", gap: "10mm", fontWeight: "600" }}>
+          <span>Meta da Semana: 🌟 [  ] Alcançada  [  ] Parcial  [  ] Não Alcançada</span>
+          <span>Assinatura: ___________________________</span>
+        </div>
       </div>
     </div>
   );

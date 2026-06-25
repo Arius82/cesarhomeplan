@@ -146,7 +146,7 @@
 @media print {
   @page {
     size: A4 landscape;
-    margin: 8mm;
+    margin: 8mm 10mm;
   }
 
   html,
@@ -168,27 +168,42 @@
     display: none !important;
   }
 
-  .print-sheet {
-    display: block !important;
-    width: 100%;
-    overflow: hidden;
+  /* Print modes toggled via root classes */
+  .print-mode-active .print-all-sheets {
+    display: none !important;
   }
 
-  .print-sheet * {
-    box-sizing: border-box;
+  .print-mode-all .print-active-sheet {
+    display: none !important;
   }
 
-  .print-table {
-    width: 100%;
-    height: 110mm;
-    table-layout: fixed;
-    border-collapse: collapse;
-  }
-
-  .print-cell {
-    height: 50%;
-    vertical-align: top;
-    border: 1px solid #000;
+  /* Page break rules for printing multiple planilhas */
+  .print-page-break {
+    page-break-after: always;
+    break-after: page;
     page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .print-page-break:last-child {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  /* Ensure containers take full A4 landscape printable area */
+  .print-active-sheet,
+  .print-all-sheets,
+  .print-sheet-content {
+    display: block !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+}
+
+/* Hide print containers on screen */
+@media screen {
+  .print-active-sheet,
+  .print-all-sheets {
+    display: none !important;
   }
 }
