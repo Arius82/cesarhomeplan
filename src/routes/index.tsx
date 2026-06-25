@@ -241,4 +241,3 @@ function PrintSheet({ user, week, tasks }: { user: UserName; week: string; tasks
     </div>
   );
 }
-}
