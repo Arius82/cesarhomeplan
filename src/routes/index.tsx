@@ -454,14 +454,7 @@ function Index() {
                 return (
                   <button
                     key={themeKey}
-                    onClick={() => {
-                      updateUser(active, (s) => ({
-                        ...s,
-                        theme: themeKey,
-                        customBgColor: PRESET_COLORS[themeKey].bg,
-                        customTextColor: PRESET_COLORS[themeKey].text
-                      }));
-                    }}
+                    onClick={() => applyThemePreset(themeKey)}
                     title={cfg.name}
                     className="px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all border border-border hover:bg-muted cursor-pointer"
                   >
