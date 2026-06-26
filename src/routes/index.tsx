@@ -195,69 +195,97 @@ function Index() {
 
   const user = state[active];
 
-  const updateUser = (u: UserName, fn: (s: AppState[UserName]) => AppState[UserName]) => {
+  // Optimistic local update only — server is mutated via atomic RPCs below
+  const applyLocal = (u: UserName, fn: (s: AppState[UserName]) => AppState[UserName]) => {
     setState((prev) => {
-      const nextUser = fn(prev[u]);
-      const nextState = { ...prev, [u]: nextUser };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
-
-      const row = userToRow(u, nextUser);
-      skipNextRealtime.current[u] = new Date(row.updated_at).getTime();
-      supabase
-        .from("user_planner")
-        .upsert(row, { onConflict: "name" })
-        .then(({ error }: { error: any }) => {
-          if (error) console.error("Failed to sync to cloud:", error);
-        });
-
-      return nextState;
+      const next = { ...prev, [u]: fn(prev[u]) };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      return next;
     });
   };
 
+  const logRpcError = (label: string) =>
+    ({ error }: { error: any }) => {
+      if (error) console.error(`RPC ${label} failed:`, error);
+    };
+
   const addTask = (day: DayKey, text: string) => {
-    if (!text.trim()) return;
-    updateUser(active, (s) => ({ ...s, tasks: { ...s.tasks, [day]: [...s.tasks[day], text.trim()] } }));
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    applyLocal(active, (s) => ({ ...s, tasks: { ...s.tasks, [day]: [...s.tasks[day], trimmed] } }));
+    supabase.rpc("planner_add_task", { p_name: active, p_day: day, p_text: trimmed }).then(logRpcError("add_task"));
   };
 
   const removeTask = (day: DayKey, idx: number) => {
-    updateUser(active, (s) => {
+    applyLocal(active, (s) => {
       const tasks = { ...s.tasks, [day]: s.tasks[day].filter((_, i) => i !== idx) };
       const newChecked = {} as Record<string, boolean>;
       Object.entries(s.checked).forEach(([k, val]) => {
         const [dKey, iStr] = k.split("-");
         if (dKey === day) {
           const index = parseInt(iStr, 10);
-          if (index < idx) {
-            newChecked[k] = val;
-          } else if (index > idx) {
-            newChecked[`${dKey}-${index - 1}`] = val;
-          }
+          if (index < idx) newChecked[k] = val;
+          else if (index > idx) newChecked[`${dKey}-${index - 1}`] = val;
         } else {
           newChecked[k] = val;
         }
       });
       return { ...s, tasks, checked: newChecked };
     });
+    supabase.rpc("planner_remove_task", { p_name: active, p_day: day, p_idx: idx }).then(logRpcError("remove_task"));
   };
 
   const toggleCheck = (day: DayKey, idx: number) => {
     const key = `${day}-${idx}`;
-    updateUser(active, (s) => ({ ...s, checked: { ...s.checked, [key]: !s.checked[key] } }));
+    applyLocal(active, (s) => ({ ...s, checked: { ...s.checked, [key]: !s.checked[key] } }));
+    supabase.rpc("planner_toggle_check", { p_name: active, p_day: day, p_idx: idx }).then(logRpcError("toggle_check"));
   };
 
   const editTask = (day: DayKey, idx: number, text: string) => {
-    if (!text.trim()) return;
-    updateUser(active, (s) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    applyLocal(active, (s) => {
       const tasks = { ...s.tasks };
-      tasks[day] = tasks[day].map((t, i) => (i === idx ? text.trim() : t));
+      tasks[day] = tasks[day].map((t, i) => (i === idx ? trimmed : t));
       return { ...s, tasks };
     });
+    supabase.rpc("planner_edit_task", { p_name: active, p_day: day, p_idx: idx, p_text: trimmed }).then(logRpcError("edit_task"));
   };
 
-  const setWeek = (week: string) => updateUser(active, (s) => ({ ...s, week }));
-  const setIcon = (icon: string) => updateUser(active, (s) => ({ ...s, icon }));
-  const setCustomBgColor = (color: string) => updateUser(active, (s) => ({ ...s, customBgColor: color }));
-  const setCustomTextColor = (color: string) => updateUser(active, (s) => ({ ...s, customTextColor: color }));
+  // Debounce week-text RPC to coalesce typing into one update
+  const weekDebounce = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const setWeek = (week: string) => {
+    applyLocal(active, (s) => ({ ...s, week }));
+    const u = active;
+    if (weekDebounce.current[u]) clearTimeout(weekDebounce.current[u]);
+    weekDebounce.current[u] = setTimeout(() => {
+      supabase.rpc("planner_update_meta", { p_name: u, p_week: week }).then(logRpcError("update_meta(week)"));
+    }, 400);
+  };
+
+  const setIcon = (icon: string) => {
+    applyLocal(active, (s) => ({ ...s, icon }));
+    supabase.rpc("planner_update_meta", { p_name: active, p_icon: icon }).then(logRpcError("update_meta(icon)"));
+  };
+
+  const setCustomBgColor = (color: string) => {
+    applyLocal(active, (s) => ({ ...s, customBgColor: color }));
+    supabase.rpc("planner_update_meta", { p_name: active, p_bg: color }).then(logRpcError("update_meta(bg)"));
+  };
+
+  const setCustomTextColor = (color: string) => {
+    applyLocal(active, (s) => ({ ...s, customTextColor: color }));
+    supabase.rpc("planner_update_meta", { p_name: active, p_text_color: color }).then(logRpcError("update_meta(text_color)"));
+  };
+
+  const applyThemePreset = (themeKey: UserTheme) => {
+    const bg = PRESET_COLORS[themeKey].bg;
+    const textColor = PRESET_COLORS[themeKey].text;
+    applyLocal(active, (s) => ({ ...s, theme: themeKey, customBgColor: bg, customTextColor: textColor }));
+    supabase
+      .rpc("planner_update_meta", { p_name: active, p_theme: themeKey, p_bg: bg, p_text_color: textColor })
+      .then(logRpcError("update_meta(theme)"));
+  };
 
   const handlePrintActive = () => {
     setPrintMode("active");
