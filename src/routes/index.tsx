@@ -1,38 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { DAYS, INITIAL_TASKS, USERS, type DayKey, type UserName, type WeekTasks, type UserTheme, THEMES, ICONS, DEFAULT_USER_SETTINGS, PRESET_COLORS } from "@/lib/initial-tasks";
-import { createServerFn } from "@tanstack/react-start";
-
-let memoryDb: any = null;
-
-export const getTasksServer = createServerFn({ method: "GET" }).handler(async () => {
-  try {
-    const fs = await import("node:fs/promises");
-    const path = await import("node:path");
-    const filePath = path.resolve(process.cwd(), "tasks-db.json");
-    const content = await fs.readFile(filePath, "utf-8");
-    const data = JSON.parse(content);
-    memoryDb = data;
-    return data;
-  } catch (err) {
-    return memoryDb;
-  }
-});
-
-export const saveTasksServer = createServerFn({ method: "POST" })
-  .validator((data: unknown) => data)
-  .handler(async ({ data }) => {
-    memoryDb = data;
-    try {
-      const fs = await import("node:fs/promises");
-      const path = await import("node:path");
-      const filePath = path.resolve(process.cwd(), "tasks-db.json");
-      await fs.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
-    } catch (err) {
-      console.warn("Failed to write tasks to file, using in-memory sync:", err);
-    }
-    return { success: true };
-  });
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/")({
   head: () => ({
