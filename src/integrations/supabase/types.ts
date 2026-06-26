@@ -55,7 +55,34 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      planner_add_task: {
+        Args: { p_day: string; p_name: string; p_text: string }
+        Returns: undefined
+      }
+      planner_edit_task: {
+        Args: { p_day: string; p_idx: number; p_name: string; p_text: string }
+        Returns: undefined
+      }
+      planner_ensure_row: { Args: { p_name: string }; Returns: undefined }
+      planner_remove_task: {
+        Args: { p_day: string; p_idx: number; p_name: string }
+        Returns: undefined
+      }
+      planner_toggle_check: {
+        Args: { p_day: string; p_idx: number; p_name: string }
+        Returns: undefined
+      }
+      planner_update_meta: {
+        Args: {
+          p_bg?: string
+          p_icon?: string
+          p_name: string
+          p_text_color?: string
+          p_theme?: string
+          p_week?: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
