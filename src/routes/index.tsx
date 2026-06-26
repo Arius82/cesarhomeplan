@@ -1,38 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { DAYS, INITIAL_TASKS, USERS, type DayKey, type UserName, type WeekTasks, type UserTheme, THEMES, ICONS, DEFAULT_USER_SETTINGS, PRESET_COLORS } from "@/lib/initial-tasks";
-import { createServerFn } from "@tanstack/react-start";
-
-let memoryDb: any = null;
-
-export const getTasksServer = createServerFn({ method: "GET" }).handler(async () => {
-  try {
-    const fs = await import("node:fs/promises");
-    const path = await import("node:path");
-    const filePath = path.resolve(process.cwd(), "tasks-db.json");
-    const content = await fs.readFile(filePath, "utf-8");
-    const data = JSON.parse(content);
-    memoryDb = data;
-    return data;
-  } catch (err) {
-    return memoryDb;
-  }
-});
-
-export const saveTasksServer = createServerFn({ method: "POST" })
-  .validator((data: unknown) => data)
-  .handler(async ({ data }) => {
-    memoryDb = data;
-    try {
-      const fs = await import("node:fs/promises");
-      const path = await import("node:path");
-      const filePath = path.resolve(process.cwd(), "tasks-db.json");
-      await fs.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
-    } catch (err) {
-      console.warn("Failed to write tasks to file, using in-memory sync:", err);
-    }
-    return { success: true };
-  });
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -83,97 +52,105 @@ function Index() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
 
-  const [lastSyncedAt, setLastSyncedAt] = useState<number>(0);
-  const lastSyncedRef = useRef<number>(0);
+  const skipNextRealtime = useRef<Record<string, number>>({});
+
+  const rowToUser = (row: any): AppState[UserName] => ({
+    week: row.week ?? "",
+    tasks: row.tasks ?? structuredClone(INITIAL_TASKS[row.name as UserName]),
+    checked: row.checked ?? {},
+    theme: row.theme ?? DEFAULT_USER_SETTINGS[row.name as UserName].theme,
+    icon: row.icon ?? DEFAULT_USER_SETTINGS[row.name as UserName].icon,
+    customBgColor: row.custom_bg_color ?? DEFAULT_USER_SETTINGS[row.name as UserName].customBgColor,
+    customTextColor: row.custom_text_color ?? DEFAULT_USER_SETTINGS[row.name as UserName].customTextColor,
+  });
+
+  const userToRow = (name: UserName, s: AppState[UserName]) => ({
+    name,
+    week: s.week,
+    tasks: s.tasks,
+    checked: s.checked,
+    theme: s.theme,
+    icon: s.icon,
+    custom_bg_color: s.customBgColor,
+    custom_text_color: s.customTextColor,
+    updated_at: new Date().toISOString(),
+  });
 
   useEffect(() => {
-    lastSyncedRef.current = lastSyncedAt;
-  }, [lastSyncedAt]);
+    let cancelled = false;
 
-  useEffect(() => {
-    let activeSync = true;
-
-    const initialSync = async () => {
+    const loadFromCloud = async () => {
       try {
-        const serverData = await getTasksServer();
-        if (serverData && serverData.state && serverData.updatedAt) {
-          if (activeSync) {
-            setState(serverData.state);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(serverData.state));
-            setLastSyncedAt(serverData.updatedAt);
+        const { data, error } = await supabase.from("user_planner").select("*");
+        if (error) throw error;
+
+        const cloudByName: Record<string, any> = {};
+        (data || []).forEach((row: any) => { cloudByName[row.name] = row; });
+
+        // Seed missing users from initial state
+        const seeded: AppState = makeInitialState();
+        const toInsert: any[] = [];
+        for (const u of USERS) {
+          if (cloudByName[u]) {
+            seeded[u] = rowToUser(cloudByName[u]);
+          } else {
+            toInsert.push(userToRow(u, seeded[u]));
           }
-        } else {
-          const raw = localStorage.getItem(STORAGE_KEY);
-          let localState = makeInitialState();
-          if (raw) {
-            try {
-              const parsed = JSON.parse(raw);
-              for (const u of USERS) {
-                if (parsed[u]) {
-                  localState[u] = {
-                    ...localState[u],
-                    ...parsed[u],
-                    customBgColor: parsed[u].customBgColor || DEFAULT_USER_SETTINGS[u].customBgColor,
-                    customTextColor: parsed[u].customTextColor || DEFAULT_USER_SETTINGS[u].customTextColor,
-                  };
-                }
-              }
-            } catch {}
-          }
-          const now = Date.now();
-          if (activeSync) {
-            setState(localState);
-            setLastSyncedAt(now);
-          }
-          await saveTasksServer({ state: localState, updatedAt: now });
+        }
+        if (toInsert.length > 0) {
+          await supabase.from("user_planner").insert(toInsert);
+        }
+        if (!cancelled) {
+          setState(seeded);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
         }
       } catch (err) {
-        console.error("Failed initial sync, falling back to local:", err);
+        console.error("Failed to load from cloud, using local cache:", err);
         const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw && activeSync) {
+        if (raw && !cancelled) {
           try {
             const parsed = JSON.parse(raw);
-            const newState = makeInitialState();
+            const fallback = makeInitialState();
             for (const u of USERS) {
               if (parsed[u]) {
-                newState[u] = {
-                  ...newState[u],
-                  ...parsed[u],
-                  customBgColor: parsed[u].customBgColor || DEFAULT_USER_SETTINGS[u].customBgColor,
-                  customTextColor: parsed[u].customTextColor || DEFAULT_USER_SETTINGS[u].customTextColor,
-                };
+                fallback[u] = { ...fallback[u], ...parsed[u] };
               }
             }
-            setState(newState);
+            setState(fallback);
           } catch {}
         }
       } finally {
-        if (activeSync) {
-          setLoaded(true);
-        }
+        if (!cancelled) setLoaded(true);
       }
     };
 
-    initialSync();
+    loadFromCloud();
 
-    const interval = setInterval(async () => {
-      try {
-        const serverData = await getTasksServer();
-        if (serverData && serverData.state && serverData.updatedAt) {
-          if (serverData.updatedAt > lastSyncedRef.current && activeSync) {
-            setState(serverData.state);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(serverData.state));
-            setLastSyncedAt(serverData.updatedAt);
+    const channel = supabase
+      .channel("user_planner_changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "user_planner" },
+        (payload: any) => {
+          const row = payload.new;
+          if (!row || !USERS.includes(row.name)) return;
+          const updatedTs = new Date(row.updated_at).getTime();
+          if (skipNextRealtime.current[row.name] === updatedTs) {
+            delete skipNextRealtime.current[row.name];
+            return;
           }
+          setState((prev) => {
+            const next = { ...prev, [row.name as UserName]: rowToUser(row) };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+            return next;
+          });
         }
-      } catch (err) {
-        console.warn("Polling sync failed:", err);
-      }
-    }, 4000);
+      )
+      .subscribe();
 
     return () => {
-      activeSync = false;
-      clearInterval(interval);
+      cancelled = true;
+      supabase.removeChannel(channel);
     };
   }, []);
 
@@ -220,16 +197,19 @@ function Index() {
 
   const updateUser = (u: UserName, fn: (s: AppState[UserName]) => AppState[UserName]) => {
     setState((prev) => {
-      const nextState = { ...prev, [u]: fn(prev[u]) };
+      const nextUser = fn(prev[u]);
+      const nextState = { ...prev, [u]: nextUser };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
-      
-      const now = Date.now();
-      lastSyncedRef.current = now;
-      setLastSyncedAt(now);
-      saveTasksServer({ state: nextState, updatedAt: now }).catch((err) => {
-        console.error("Failed to sync to server:", err);
-      });
-      
+
+      const row = userToRow(u, nextUser);
+      skipNextRealtime.current[u] = new Date(row.updated_at).getTime();
+      supabase
+        .from("user_planner")
+        .upsert(row, { onConflict: "name" })
+        .then(({ error }: { error: any }) => {
+          if (error) console.error("Failed to sync to cloud:", error);
+        });
+
       return nextState;
     });
   };
@@ -739,7 +719,7 @@ function PrintSheet({
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <span style={{ fontSize: "26pt" }}>{icon}</span>
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: "18pt", fontWeight: "900", textTransform: "uppercase", tracking: "0.05em", color: "#1e293b" }}>
+              <span style={{ fontSize: "18pt", fontWeight: "900", textTransform: "uppercase", letterSpacing: "0.05em", color: "#1e293b" }}>
                 {user}
               </span>
               <span style={{ fontSize: "8.5pt", color: "#64748b", fontWeight: "600" }}>
