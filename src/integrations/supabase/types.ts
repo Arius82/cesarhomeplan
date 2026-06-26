@@ -14,7 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      user_planner: {
+        Row: {
+          checked: Json
+          custom_bg_color: string
+          custom_text_color: string
+          icon: string
+          name: string
+          tasks: Json
+          theme: string
+          updated_at: string
+          week: string
+        }
+        Insert: {
+          checked?: Json
+          custom_bg_color?: string
+          custom_text_color?: string
+          icon?: string
+          name: string
+          tasks?: Json
+          theme?: string
+          updated_at?: string
+          week?: string
+        }
+        Update: {
+          checked?: Json
+          custom_bg_color?: string
+          custom_text_color?: string
+          icon?: string
+          name?: string
+          tasks?: Json
+          theme?: string
+          updated_at?: string
+          week?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
