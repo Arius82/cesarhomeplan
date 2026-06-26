@@ -719,7 +719,7 @@ function PrintSheet({
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <span style={{ fontSize: "26pt" }}>{icon}</span>
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: "18pt", fontWeight: "900", textTransform: "uppercase", tracking: "0.05em", color: "#1e293b" }}>
+              <span style={{ fontSize: "18pt", fontWeight: "900", textTransform: "uppercase", letterSpacing: "0.05em", color: "#1e293b" }}>
                 {user}
               </span>
               <span style={{ fontSize: "8.5pt", color: "#64748b", fontWeight: "600" }}>
