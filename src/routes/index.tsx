@@ -348,6 +348,14 @@ function Index() {
           </div>
           <div className="flex gap-2">
             <button
+              onClick={undo}
+              disabled={history.length === 0}
+              title={history.length > 0 ? `Desfazer: ${history[history.length - 1].label} (${history[history.length - 1].user})` : "Nada para desfazer"}
+              className="rounded-md bg-secondary border border-border px-4 py-2 text-sm font-semibold text-secondary-foreground hover:bg-secondary/80 shadow cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+            >
+              ↶ Desfazer{history.length > 0 ? ` (${history.length})` : ""}
+            </button>
+            <button
               onClick={handlePrintActive}
               className="rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-semibold transition-all shadow hover:bg-primary/95 cursor-pointer"
             >
