@@ -54,6 +54,11 @@ function Index() {
 
   const skipNextRealtime = useRef<Record<string, number>>({});
 
+  // Undo stack: snapshots of per-user state taken BEFORE each mutating action
+  type HistoryEntry = { user: UserName; label: string; snapshot: AppState[UserName] };
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const MAX_HISTORY = 50;
+
   const rowToUser = (row: any): AppState[UserName] => ({
     week: row.week ?? "",
     tasks: row.tasks ?? structuredClone(INITIAL_TASKS[row.name as UserName]),
@@ -209,14 +214,44 @@ function Index() {
       if (error) console.error(`RPC ${label} failed:`, error);
     };
 
+  const pushHistory = (u: UserName, label: string) => {
+    setHistory((h) => {
+      const snap = structuredClone(state[u]);
+      const next = [...h, { user: u, label, snapshot: snap }];
+      if (next.length > MAX_HISTORY) next.shift();
+      return next;
+    });
+  };
+
+  const undo = () => {
+    setHistory((h) => {
+      if (h.length === 0) return h;
+      const entry = h[h.length - 1];
+      // Restore local state
+      applyLocal(entry.user, () => entry.snapshot);
+      // Persist full row to cloud (overwrite). Acceptable for an explicit undo.
+      supabase
+        .from("user_planner")
+        .upsert(userToRow(entry.user, entry.snapshot), { onConflict: "name" })
+        .then(({ error }) => {
+          if (error) console.error("undo upsert failed:", error);
+        });
+      // Switch to that user so the change is visible
+      setActive(entry.user);
+      return h.slice(0, -1);
+    });
+  };
+
   const addTask = (day: DayKey, text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
+    pushHistory(active, `Adicionar tarefa em ${day}`);
     applyLocal(active, (s) => ({ ...s, tasks: { ...s.tasks, [day]: [...s.tasks[day], trimmed] } }));
     supabase.rpc("planner_add_task", { p_name: active, p_day: day, p_text: trimmed }).then(logRpcError("add_task"));
   };
 
   const removeTask = (day: DayKey, idx: number) => {
+    pushHistory(active, `Remover tarefa de ${day}`);
     applyLocal(active, (s) => {
       const tasks = { ...s.tasks, [day]: s.tasks[day].filter((_, i) => i !== idx) };
       const newChecked = {} as Record<string, boolean>;
@@ -237,6 +272,7 @@ function Index() {
 
   const toggleCheck = (day: DayKey, idx: number) => {
     const key = `${day}-${idx}`;
+    pushHistory(active, `Marcar/desmarcar em ${day}`);
     applyLocal(active, (s) => ({ ...s, checked: { ...s.checked, [key]: !s.checked[key] } }));
     supabase.rpc("planner_toggle_check", { p_name: active, p_day: day, p_idx: idx }).then(logRpcError("toggle_check"));
   };
@@ -244,6 +280,7 @@ function Index() {
   const editTask = (day: DayKey, idx: number, text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
+    pushHistory(active, `Editar tarefa em ${day}`);
     applyLocal(active, (s) => {
       const tasks = { ...s.tasks };
       tasks[day] = tasks[day].map((t, i) => (i === idx ? trimmed : t));
@@ -310,6 +347,14 @@ function Index() {
             <h1 className="text-2xl font-black tracking-tight">Uma casa organizada é uma casa feliz 😊</h1>
           </div>
           <div className="flex gap-2">
+            <button
+              onClick={undo}
+              disabled={history.length === 0}
+              title={history.length > 0 ? `Desfazer: ${history[history.length - 1].label} (${history[history.length - 1].user})` : "Nada para desfazer"}
+              className="rounded-md bg-secondary border border-border px-4 py-2 text-sm font-semibold text-secondary-foreground hover:bg-secondary/80 shadow cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+            >
+              ↶ Desfazer{history.length > 0 ? ` (${history.length})` : ""}
+            </button>
             <button
               onClick={handlePrintActive}
               className="rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-semibold transition-all shadow hover:bg-primary/95 cursor-pointer"
