@@ -152,7 +152,12 @@ function Index() {
   }, []);
 
   const trackRpc = useCallback(
-    async (promise: Promise<any>, action: OfflineAction, successMessage?: string, options?: { silent?: boolean }) => {
+    async (
+      promise: PromiseLike<any>,
+      action: OfflineAction,
+      successMessage?: string,
+      options?: { silent?: boolean }
+    ) => {
       pendingCount.current += 1;
       setStableSyncStatus("saving");
       try {
