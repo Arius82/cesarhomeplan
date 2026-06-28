@@ -1,7 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { DAYS, INITIAL_TASKS, USERS, type DayKey, type UserName, type WeekTasks, type UserTheme, THEMES, ICONS, DEFAULT_USER_SETTINGS, PRESET_COLORS } from "@/lib/initial-tasks";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -27,6 +38,46 @@ type AppState = Record<
 >;
 
 const STORAGE_KEY = "casa-organizada-v1";
+const OFFLINE_QUEUE_KEY = "casa-organizada-offline-queue-v1";
+
+type SyncStatus = "idle" | "saving" | "saved" | "offline" | "error";
+
+type OfflineAction =
+  | { type: "add_task"; name: UserName; day: DayKey; text: string }
+  | { type: "remove_task"; name: UserName; day: DayKey; idx: number }
+  | { type: "toggle_check"; name: UserName; day: DayKey; idx: number }
+  | { type: "edit_task"; name: UserName; day: DayKey; idx: number; text: string }
+  | { type: "update_meta"; name: UserName; week?: string; icon?: string; bg?: string; text_color?: string; theme?: UserTheme };
+
+function getDayLabel(day: DayKey): string {
+  const found = DAYS.find((d) => d.key === day);
+  return found ? found.label : day;
+}
+
+function readOfflineQueue(): OfflineAction[] {
+  try {
+    const raw = localStorage.getItem(OFFLINE_QUEUE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeOfflineQueue(queue: OfflineAction[]) {
+  try {
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+  } catch {}
+}
+
+function enqueueOffline(action: OfflineAction) {
+  const queue = readOfflineQueue();
+  queue.push(action);
+  writeOfflineQueue(queue);
+}
+
+function clearOfflineQueue() {
+  writeOfflineQueue([]);
+}
 
 function makeInitialState(): AppState {
   const state = {} as AppState;
@@ -59,6 +110,14 @@ function Index() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const MAX_HISTORY = 50;
 
+  // Sync status + offline retry
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const isOnline = useRef<boolean>(navigator.onLine);
+  const pendingCount = useRef<number>(0);
+  const lastSyncToast = useRef<number>(0);
+  const syncStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const rowToUser = (row: any): AppState[UserName] => ({
     week: row.week ?? "",
     tasks: row.tasks ?? structuredClone(INITIAL_TASKS[row.name as UserName]),
@@ -80,6 +139,69 @@ function Index() {
     custom_text_color: s.customTextColor,
     updated_at: new Date().toISOString(),
   });
+
+  // ---------- Sync helpers ----------
+  const setStableSyncStatus = useCallback((status: SyncStatus) => {
+    if (syncStatusTimer.current) clearTimeout(syncStatusTimer.current);
+    if (status === "saved") {
+      setSyncStatus("saved");
+      syncStatusTimer.current = setTimeout(() => setSyncStatus("idle"), 2000);
+    } else {
+      setSyncStatus(status);
+    }
+  }, []);
+
+  const trackRpc = useCallback(
+    async (
+      promise: PromiseLike<any>,
+      action: OfflineAction,
+      successMessage?: string,
+      options?: { silent?: boolean }
+    ) => {
+      pendingCount.current += 1;
+      setStableSyncStatus("saving");
+      try {
+        const result = await promise;
+        if (result?.error) throw result.error;
+        setLastSavedAt(new Date());
+        setStableSyncStatus("saved");
+        if (successMessage && !options?.silent) {
+          toast.success(successMessage);
+        }
+        return result;
+      } catch (err: any) {
+        if (!navigator.onLine) {
+          setStableSyncStatus("offline");
+          enqueueOffline(action);
+          toast.error("Você está offline. A alteração foi salva localmente e será enviada quando a internet voltar.");
+        } else {
+          setStableSyncStatus("error");
+          enqueueOffline(action);
+          toast.error("Falha ao salvar na nuvem. Tentaremos enviar novamente automaticamente.");
+        }
+        throw err;
+      } finally {
+        pendingCount.current = Math.max(0, pendingCount.current - 1);
+        if (pendingCount.current === 0 && syncStatus !== "offline" && syncStatus !== "error") {
+          // keep status set by inner logic (saved or idle)
+        }
+      }
+    },
+    [setStableSyncStatus]
+  );
+
+  const showSyncStatus = () => {
+    const now = Date.now();
+    if (now - lastSyncToast.current < 3000) return;
+    lastSyncToast.current = now;
+    if (syncStatus === "offline") {
+      toast.info("Você está offline. Alterações estão guardadas e serão sincronizadas automaticamente.");
+    } else if (syncStatus === "error") {
+      toast.error("Houve um problema de sincronização. Verifique a internet.");
+    } else if (lastSavedAt) {
+      toast.success(`Sincronizado ${lastSavedAt.toLocaleTimeString()}`, { id: "sync-status" });
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -160,6 +282,79 @@ function Index() {
   }, []);
 
   useEffect(() => {
+    const handleOnline = () => {
+      isOnline.current = true;
+      setStableSyncStatus("idle");
+      toast.success("Internet de volta! Sincronizando alterações pendentes...");
+      void retryOfflineQueue();
+    };
+
+    const handleOffline = () => {
+      isOnline.current = false;
+      setStableSyncStatus("offline");
+      toast.info("Você ficou offline. As alterações continuarão funcionando localmente.");
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    if (!navigator.onLine) {
+      setStableSyncStatus("offline");
+    }
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [setStableSyncStatus]);
+
+  // Retry offline queue
+  const retryOfflineQueue = useCallback(async () => {
+    const queue = readOfflineQueue();
+    if (queue.length === 0) return;
+    const remaining: OfflineAction[] = [];
+    setStableSyncStatus("saving");
+    for (const action of queue) {
+      try {
+        await dispatchOfflineAction(action);
+      } catch {
+        remaining.push(action);
+      }
+    }
+    writeOfflineQueue(remaining);
+    if (remaining.length > 0) {
+      setStableSyncStatus("error");
+      toast.error("Algumas alterações ainda não foram sincronizadas. Tentaremos novamente.");
+    } else {
+      setLastSavedAt(new Date());
+      setStableSyncStatus("saved");
+      toast.success("Todas as alterações foram sincronizadas!");
+    }
+  }, [setStableSyncStatus]);
+
+  async function dispatchOfflineAction(action: OfflineAction) {
+    switch (action.type) {
+      case "add_task":
+        return supabase.rpc("planner_add_task", { p_name: action.name, p_day: action.day, p_text: action.text });
+      case "remove_task":
+        return supabase.rpc("planner_remove_task", { p_name: action.name, p_day: action.day, p_idx: action.idx });
+      case "toggle_check":
+        return supabase.rpc("planner_toggle_check", { p_name: action.name, p_day: action.day, p_idx: action.idx });
+      case "edit_task":
+        return supabase.rpc("planner_edit_task", { p_name: action.name, p_day: action.day, p_idx: action.idx, p_text: action.text });
+      case "update_meta":
+        return supabase.rpc("planner_update_meta", {
+          p_name: action.name,
+          p_week: action.week,
+          p_icon: action.icon,
+          p_bg_color: action.bg,
+          p_text_color: action.text_color,
+          p_theme: action.theme,
+        });
+    }
+  }
+
+  useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -209,11 +404,6 @@ function Index() {
     });
   };
 
-  const logRpcError = (label: string) =>
-    ({ error }: { error: any }) => {
-      if (error) console.error(`RPC ${label} failed:`, error);
-    };
-
   const pushHistory = (u: UserName, label: string) => {
     setHistory((h) => {
       const snap = structuredClone(state[u]);
@@ -230,28 +420,40 @@ function Index() {
       // Restore local state
       applyLocal(entry.user, () => entry.snapshot);
       // Persist full row to cloud (overwrite). Acceptable for an explicit undo.
-      supabase
-        .from("user_planner")
-        .upsert(userToRow(entry.user, entry.snapshot), { onConflict: "name" })
-        .then(({ error }) => {
-          if (error) console.error("undo upsert failed:", error);
-        });
+      void trackRpc(
+        supabase.from("user_planner").upsert(userToRow(entry.user, entry.snapshot), { onConflict: "name" }),
+        { type: "update_meta", name: entry.user, week: entry.snapshot.week, icon: entry.snapshot.icon, bg: entry.snapshot.customBgColor, text_color: entry.snapshot.customTextColor, theme: entry.snapshot.theme },
+        "Ação desfeita"
+      );
       // Switch to that user so the change is visible
       setActive(entry.user);
       return h.slice(0, -1);
     });
   };
 
+  const [pendingRemove, setPendingRemove] = useState<{ day: DayKey; idx: number; text: string } | null>(null);
+
   const addTask = (day: DayKey, text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    pushHistory(active, `Adicionar tarefa em ${day}`);
+    pushHistory(active, `Adicionar tarefa em ${getDayLabel(day)}`);
     applyLocal(active, (s) => ({ ...s, tasks: { ...s.tasks, [day]: [...s.tasks[day], trimmed] } }));
-    supabase.rpc("planner_add_task", { p_name: active, p_day: day, p_text: trimmed }).then(logRpcError("add_task"));
+    void trackRpc(
+      supabase.rpc("planner_add_task", { p_name: active, p_day: day, p_text: trimmed }),
+      { type: "add_task", name: active, day, text: trimmed },
+      "Tarefa adicionada"
+    );
   };
 
   const removeTask = (day: DayKey, idx: number) => {
-    pushHistory(active, `Remover tarefa de ${day}`);
+    const taskText = user.tasks[day][idx] || "";
+    setPendingRemove({ day, idx, text: taskText });
+  };
+
+  const confirmRemoveTask = () => {
+    if (!pendingRemove) return;
+    const { day, idx } = pendingRemove;
+    pushHistory(active, `Remover tarefa de ${getDayLabel(day)}`);
     applyLocal(active, (s) => {
       const tasks = { ...s.tasks, [day]: s.tasks[day].filter((_, i) => i !== idx) };
       const newChecked = {} as Record<string, boolean>;
@@ -267,26 +469,40 @@ function Index() {
       });
       return { ...s, tasks, checked: newChecked };
     });
-    supabase.rpc("planner_remove_task", { p_name: active, p_day: day, p_idx: idx }).then(logRpcError("remove_task"));
+    void trackRpc(
+      supabase.rpc("planner_remove_task", { p_name: active, p_day: day, p_idx: idx }),
+      { type: "remove_task", name: active, day, idx },
+      "Tarefa removida"
+    );
+    setPendingRemove(null);
   };
 
   const toggleCheck = (day: DayKey, idx: number) => {
     const key = `${day}-${idx}`;
-    pushHistory(active, `Marcar/desmarcar em ${day}`);
+    pushHistory(active, `Marcar/desmarcar em ${getDayLabel(day)}`);
     applyLocal(active, (s) => ({ ...s, checked: { ...s.checked, [key]: !s.checked[key] } }));
-    supabase.rpc("planner_toggle_check", { p_name: active, p_day: day, p_idx: idx }).then(logRpcError("toggle_check"));
+    void trackRpc(
+      supabase.rpc("planner_toggle_check", { p_name: active, p_day: day, p_idx: idx }),
+      { type: "toggle_check", name: active, day, idx },
+      undefined,
+      { silent: true }
+    );
   };
 
   const editTask = (day: DayKey, idx: number, text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    pushHistory(active, `Editar tarefa em ${day}`);
+    pushHistory(active, `Editar tarefa em ${getDayLabel(day)}`);
     applyLocal(active, (s) => {
       const tasks = { ...s.tasks };
       tasks[day] = tasks[day].map((t, i) => (i === idx ? trimmed : t));
       return { ...s, tasks };
     });
-    supabase.rpc("planner_edit_task", { p_name: active, p_day: day, p_idx: idx, p_text: trimmed }).then(logRpcError("edit_task"));
+    void trackRpc(
+      supabase.rpc("planner_edit_task", { p_name: active, p_day: day, p_idx: idx, p_text: trimmed }),
+      { type: "edit_task", name: active, day, idx, text: trimmed },
+      "Tarefa atualizada"
+    );
   };
 
   // Debounce week-text RPC to coalesce typing into one update
@@ -296,32 +512,53 @@ function Index() {
     const u = active;
     if (weekDebounce.current[u]) clearTimeout(weekDebounce.current[u]);
     weekDebounce.current[u] = setTimeout(() => {
-      supabase.rpc("planner_update_meta", { p_name: u, p_week: week }).then(logRpcError("update_meta(week)"));
+      void trackRpc(
+        supabase.rpc("planner_update_meta", { p_name: u, p_week: week }),
+        { type: "update_meta", name: u, week },
+        undefined,
+        { silent: true }
+      );
     }, 400);
   };
 
   const setIcon = (icon: string) => {
     applyLocal(active, (s) => ({ ...s, icon }));
-    supabase.rpc("planner_update_meta", { p_name: active, p_icon: icon }).then(logRpcError("update_meta(icon)"));
+    void trackRpc(
+      supabase.rpc("planner_update_meta", { p_name: active, p_icon: icon }),
+      { type: "update_meta", name: active, icon },
+      "Ícone atualizado"
+    );
   };
 
   const setCustomBgColor = (color: string) => {
     applyLocal(active, (s) => ({ ...s, customBgColor: color }));
-    supabase.rpc("planner_update_meta", { p_name: active, p_bg: color }).then(logRpcError("update_meta(bg)"));
+    void trackRpc(
+      supabase.rpc("planner_update_meta", { p_name: active, p_bg: color }),
+      { type: "update_meta", name: active, bg: color },
+      undefined,
+      { silent: true }
+    );
   };
 
   const setCustomTextColor = (color: string) => {
     applyLocal(active, (s) => ({ ...s, customTextColor: color }));
-    supabase.rpc("planner_update_meta", { p_name: active, p_text_color: color }).then(logRpcError("update_meta(text_color)"));
+    void trackRpc(
+      supabase.rpc("planner_update_meta", { p_name: active, p_text_color: color }),
+      { type: "update_meta", name: active, text_color: color },
+      undefined,
+      { silent: true }
+    );
   };
 
   const applyThemePreset = (themeKey: UserTheme) => {
     const bg = PRESET_COLORS[themeKey].bg;
     const textColor = PRESET_COLORS[themeKey].text;
     applyLocal(active, (s) => ({ ...s, theme: themeKey, customBgColor: bg, customTextColor: textColor }));
-    supabase
-      .rpc("planner_update_meta", { p_name: active, p_theme: themeKey, p_bg: bg, p_text_color: textColor })
-      .then(logRpcError("update_meta(theme)"));
+    void trackRpc(
+      supabase.rpc("planner_update_meta", { p_name: active, p_theme: themeKey, p_bg: bg, p_text_color: textColor }),
+      { type: "update_meta", name: active, theme: themeKey, bg, text_color: textColor },
+      "Tema aplicado"
+    );
   };
 
   const handlePrintActive = () => {
@@ -367,6 +604,8 @@ function Index() {
             >
               Imprimir todas (4 págs.)
             </button>
+
+            <SyncStatusChip status={syncStatus} lastSavedAt={lastSavedAt} onClick={showSyncStatus} />
           </div>
         </header>
 
@@ -530,6 +769,24 @@ function Index() {
             />
           ))}
         </div>
+
+        {/* Delete confirmation dialog */}
+        <AlertDialog open={!!pendingRemove} onOpenChange={(open) => !open && setPendingRemove(null)}>
+          <AlertDialogContent className="no-print">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir tarefa?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja remover a tarefa "{pendingRemove?.text}" de {pendingRemove ? getDayLabel(pendingRemove.day) : ""}?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setPendingRemove(null)}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmRemoveTask} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Excluir
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       {/* Printable Containers (Always rendered but toggle class hides/shows during printing) */}
@@ -562,6 +819,35 @@ function Index() {
         })}
       </div>
     </div>
+  );
+}
+
+function SyncStatusChip({
+  status,
+  lastSavedAt,
+  onClick,
+}: {
+  status: SyncStatus;
+  lastSavedAt: Date | null;
+  onClick: () => void;
+}) {
+  const config: Record<SyncStatus, { label: string; emoji: string; color: string }> = {
+    idle: { label: "Sincronizado", emoji: "☁️", color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
+    saving: { label: "Salvando...", emoji: "⏳", color: "text-amber-600 bg-amber-50 border-amber-200 animate-pulse" },
+    saved: { label: "Salvo", emoji: "✅", color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
+    offline: { label: "Offline", emoji: "📴", color: "text-slate-600 bg-slate-100 border-slate-300" },
+    error: { label: "Erro de sinc.", emoji: "⚠️", color: "text-rose-600 bg-rose-50 border-rose-200" },
+  };
+  const { label, emoji, color } = config[status];
+  return (
+    <button
+      onClick={onClick}
+      title={lastSavedAt ? `Última sincronização: ${lastSavedAt.toLocaleTimeString()}` : "Clique para ver o status de sincronização"}
+      className={`ml-1 hidden sm:flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all hover:opacity-80 cursor-pointer ${color}`}
+    >
+      <span>{emoji}</span>
+      <span>{label}</span>
+    </button>
   );
 }
 
