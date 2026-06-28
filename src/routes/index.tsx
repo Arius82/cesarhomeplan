@@ -610,6 +610,8 @@ function Index() {
             >
               Imprimir todas (4 págs.)
             </button>
+
+            <SyncStatusChip status={syncStatus} lastSavedAt={lastSavedAt} onClick={showSyncStatus} />
           </div>
         </header>
 
