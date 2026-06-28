@@ -110,6 +110,14 @@ function Index() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const MAX_HISTORY = 50;
 
+  // Sync status + offline retry
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const isOnline = useRef<boolean>(navigator.onLine);
+  const pendingCount = useRef<number>(0);
+  const lastSyncToast = useRef<number>(0);
+  const syncStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const rowToUser = (row: any): AppState[UserName] => ({
     week: row.week ?? "",
     tasks: row.tasks ?? structuredClone(INITIAL_TASKS[row.name as UserName]),
