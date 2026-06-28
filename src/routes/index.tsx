@@ -810,6 +810,35 @@ function Index() {
   );
 }
 
+function SyncStatusChip({
+  status,
+  lastSavedAt,
+  onClick,
+}: {
+  status: SyncStatus;
+  lastSavedAt: Date | null;
+  onClick: () => void;
+}) {
+  const config: Record<SyncStatus, { label: string; emoji: string; color: string }> = {
+    idle: { label: "Sincronizado", emoji: "☁️", color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
+    saving: { label: "Salvando...", emoji: "⏳", color: "text-amber-600 bg-amber-50 border-amber-200 animate-pulse" },
+    saved: { label: "Salvo", emoji: "✅", color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
+    offline: { label: "Offline", emoji: "📴", color: "text-slate-600 bg-slate-100 border-slate-300" },
+    error: { label: "Erro de sinc.", emoji: "⚠️", color: "text-rose-600 bg-rose-50 border-rose-200" },
+  };
+  const { label, emoji, color } = config[status];
+  return (
+    <button
+      onClick={onClick}
+      title={lastSavedAt ? `Última sincronização: ${lastSavedAt.toLocaleTimeString()}` : "Clique para ver o status de sincronização"}
+      className={`ml-1 hidden sm:flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all hover:opacity-80 cursor-pointer ${color}`}
+    >
+      <span>{emoji}</span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
 function TaskItem({
   day,
   idx,
