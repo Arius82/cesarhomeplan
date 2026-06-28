@@ -775,6 +775,24 @@ function Index() {
             />
           ))}
         </div>
+
+        {/* Delete confirmation dialog */}
+        <AlertDialog open={!!pendingRemove} onOpenChange={(open) => !open && setPendingRemove(null)}>
+          <AlertDialogContent className="no-print">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir tarefa?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja remover a tarefa "{pendingRemove?.text}" de {pendingRemove ? getDayLabel(pendingRemove.day) : ""}?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setPendingRemove(null)}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmRemoveTask} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Excluir
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       {/* Printable Containers (Always rendered but toggle class hides/shows during printing) */}
