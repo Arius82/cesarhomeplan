@@ -140,6 +140,64 @@ function Index() {
     updated_at: new Date().toISOString(),
   });
 
+  // ---------- Sync helpers ----------
+  const setStableSyncStatus = useCallback((status: SyncStatus) => {
+    if (syncStatusTimer.current) clearTimeout(syncStatusTimer.current);
+    if (status === "saved") {
+      setSyncStatus("saved");
+      syncStatusTimer.current = setTimeout(() => setSyncStatus("idle"), 2000);
+    } else {
+      setSyncStatus(status);
+    }
+  }, []);
+
+  const trackRpc = useCallback(
+    async (promise: Promise<any>, action: OfflineAction, successMessage?: string, options?: { silent?: boolean }) => {
+      pendingCount.current += 1;
+      setStableSyncStatus("saving");
+      try {
+        const result = await promise;
+        if (result?.error) throw result.error;
+        setLastSavedAt(new Date());
+        setStableSyncStatus("saved");
+        if (successMessage && !options?.silent) {
+          toast.success(successMessage);
+        }
+        return result;
+      } catch (err: any) {
+        if (!navigator.onLine) {
+          setStableSyncStatus("offline");
+          enqueueOffline(action);
+          toast.error("Você está offline. A alteração foi salva localmente e será enviada quando a internet voltar.");
+        } else {
+          setStableSyncStatus("error");
+          enqueueOffline(action);
+          toast.error("Falha ao salvar na nuvem. Tentaremos enviar novamente automaticamente.");
+        }
+        throw err;
+      } finally {
+        pendingCount.current = Math.max(0, pendingCount.current - 1);
+        if (pendingCount.current === 0 && syncStatus !== "offline" && syncStatus !== "error") {
+          // keep status set by inner logic (saved or idle)
+        }
+      }
+    },
+    [setStableSyncStatus]
+  );
+
+  const showSyncStatus = () => {
+    const now = Date.now();
+    if (now - lastSyncToast.current < 3000) return;
+    lastSyncToast.current = now;
+    if (syncStatus === "offline") {
+      toast.info("Você está offline. Alterações estão guardadas e serão sincronizadas automaticamente.");
+    } else if (syncStatus === "error") {
+      toast.error("Houve um problema de sincronização. Verifique a internet.");
+    } else if (lastSavedAt) {
+      toast.success(`Sincronizado ${lastSavedAt.toLocaleTimeString()}`, { id: "sync-status" });
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
 
