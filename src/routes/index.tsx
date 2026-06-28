@@ -432,16 +432,29 @@ function Index() {
     });
   };
 
+  const [pendingRemove, setPendingRemove] = useState<{ day: DayKey; idx: number; text: string } | null>(null);
+
   const addTask = (day: DayKey, text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    pushHistory(active, `Adicionar tarefa em ${day}`);
+    pushHistory(active, `Adicionar tarefa em ${getDayLabel(day)}`);
     applyLocal(active, (s) => ({ ...s, tasks: { ...s.tasks, [day]: [...s.tasks[day], trimmed] } }));
-    supabase.rpc("planner_add_task", { p_name: active, p_day: day, p_text: trimmed }).then(logRpcError("add_task"));
+    void trackRpc(
+      supabase.rpc("planner_add_task", { p_name: active, p_day: day, p_text: trimmed }),
+      { type: "add_task", name: active, day, text: trimmed },
+      "Tarefa adicionada"
+    );
   };
 
   const removeTask = (day: DayKey, idx: number) => {
-    pushHistory(active, `Remover tarefa de ${day}`);
+    const taskText = user.tasks[day][idx] || "";
+    setPendingRemove({ day, idx, text: taskText });
+  };
+
+  const confirmRemoveTask = () => {
+    if (!pendingRemove) return;
+    const { day, idx } = pendingRemove;
+    pushHistory(active, `Remover tarefa de ${getDayLabel(day)}`);
     applyLocal(active, (s) => {
       const tasks = { ...s.tasks, [day]: s.tasks[day].filter((_, i) => i !== idx) };
       const newChecked = {} as Record<string, boolean>;
@@ -457,26 +470,40 @@ function Index() {
       });
       return { ...s, tasks, checked: newChecked };
     });
-    supabase.rpc("planner_remove_task", { p_name: active, p_day: day, p_idx: idx }).then(logRpcError("remove_task"));
+    void trackRpc(
+      supabase.rpc("planner_remove_task", { p_name: active, p_day: day, p_idx: idx }),
+      { type: "remove_task", name: active, day, idx },
+      "Tarefa removida"
+    );
+    setPendingRemove(null);
   };
 
   const toggleCheck = (day: DayKey, idx: number) => {
     const key = `${day}-${idx}`;
-    pushHistory(active, `Marcar/desmarcar em ${day}`);
+    pushHistory(active, `Marcar/desmarcar em ${getDayLabel(day)}`);
     applyLocal(active, (s) => ({ ...s, checked: { ...s.checked, [key]: !s.checked[key] } }));
-    supabase.rpc("planner_toggle_check", { p_name: active, p_day: day, p_idx: idx }).then(logRpcError("toggle_check"));
+    void trackRpc(
+      supabase.rpc("planner_toggle_check", { p_name: active, p_day: day, p_idx: idx }),
+      { type: "toggle_check", name: active, day, idx },
+      undefined,
+      { silent: true }
+    );
   };
 
   const editTask = (day: DayKey, idx: number, text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    pushHistory(active, `Editar tarefa em ${day}`);
+    pushHistory(active, `Editar tarefa em ${getDayLabel(day)}`);
     applyLocal(active, (s) => {
       const tasks = { ...s.tasks };
       tasks[day] = tasks[day].map((t, i) => (i === idx ? trimmed : t));
       return { ...s, tasks };
     });
-    supabase.rpc("planner_edit_task", { p_name: active, p_day: day, p_idx: idx, p_text: trimmed }).then(logRpcError("edit_task"));
+    void trackRpc(
+      supabase.rpc("planner_edit_task", { p_name: active, p_day: day, p_idx: idx, p_text: trimmed }),
+      { type: "edit_task", name: active, day, idx, text: trimmed },
+      "Tarefa atualizada"
+    );
   };
 
   // Debounce week-text RPC to coalesce typing into one update
@@ -486,32 +513,53 @@ function Index() {
     const u = active;
     if (weekDebounce.current[u]) clearTimeout(weekDebounce.current[u]);
     weekDebounce.current[u] = setTimeout(() => {
-      supabase.rpc("planner_update_meta", { p_name: u, p_week: week }).then(logRpcError("update_meta(week)"));
+      void trackRpc(
+        supabase.rpc("planner_update_meta", { p_name: u, p_week: week }),
+        { type: "update_meta", name: u, week },
+        undefined,
+        { silent: true }
+      );
     }, 400);
   };
 
   const setIcon = (icon: string) => {
     applyLocal(active, (s) => ({ ...s, icon }));
-    supabase.rpc("planner_update_meta", { p_name: active, p_icon: icon }).then(logRpcError("update_meta(icon)"));
+    void trackRpc(
+      supabase.rpc("planner_update_meta", { p_name: active, p_icon: icon }),
+      { type: "update_meta", name: active, icon },
+      "Ícone atualizado"
+    );
   };
 
   const setCustomBgColor = (color: string) => {
     applyLocal(active, (s) => ({ ...s, customBgColor: color }));
-    supabase.rpc("planner_update_meta", { p_name: active, p_bg: color }).then(logRpcError("update_meta(bg)"));
+    void trackRpc(
+      supabase.rpc("planner_update_meta", { p_name: active, p_bg: color }),
+      { type: "update_meta", name: active, bg: color },
+      undefined,
+      { silent: true }
+    );
   };
 
   const setCustomTextColor = (color: string) => {
     applyLocal(active, (s) => ({ ...s, customTextColor: color }));
-    supabase.rpc("planner_update_meta", { p_name: active, p_text_color: color }).then(logRpcError("update_meta(text_color)"));
+    void trackRpc(
+      supabase.rpc("planner_update_meta", { p_name: active, p_text_color: color }),
+      { type: "update_meta", name: active, text_color: color },
+      undefined,
+      { silent: true }
+    );
   };
 
   const applyThemePreset = (themeKey: UserTheme) => {
     const bg = PRESET_COLORS[themeKey].bg;
     const textColor = PRESET_COLORS[themeKey].text;
     applyLocal(active, (s) => ({ ...s, theme: themeKey, customBgColor: bg, customTextColor: textColor }));
-    supabase
-      .rpc("planner_update_meta", { p_name: active, p_theme: themeKey, p_bg: bg, p_text_color: textColor })
-      .then(logRpcError("update_meta(theme)"));
+    void trackRpc(
+      supabase.rpc("planner_update_meta", { p_name: active, p_theme: themeKey, p_bg: bg, p_text_color: textColor }),
+      { type: "update_meta", name: active, theme: themeKey, bg, text_color: textColor },
+      "Tema aplicado"
+    );
   };
 
   const handlePrintActive = () => {
