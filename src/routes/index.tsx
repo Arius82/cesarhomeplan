@@ -277,6 +277,79 @@ function Index() {
   }, []);
 
   useEffect(() => {
+    const handleOnline = () => {
+      isOnline.current = true;
+      setStableSyncStatus("idle");
+      toast.success("Internet de volta! Sincronizando alterações pendentes...");
+      void retryOfflineQueue();
+    };
+
+    const handleOffline = () => {
+      isOnline.current = false;
+      setStableSyncStatus("offline");
+      toast.info("Você ficou offline. As alterações continuarão funcionando localmente.");
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    if (!navigator.onLine) {
+      setStableSyncStatus("offline");
+    }
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [setStableSyncStatus]);
+
+  // Retry offline queue
+  const retryOfflineQueue = useCallback(async () => {
+    const queue = readOfflineQueue();
+    if (queue.length === 0) return;
+    const remaining: OfflineAction[] = [];
+    setStableSyncStatus("saving");
+    for (const action of queue) {
+      try {
+        await dispatchOfflineAction(action);
+      } catch {
+        remaining.push(action);
+      }
+    }
+    writeOfflineQueue(remaining);
+    if (remaining.length > 0) {
+      setStableSyncStatus("error");
+      toast.error("Algumas alterações ainda não foram sincronizadas. Tentaremos novamente.");
+    } else {
+      setLastSavedAt(new Date());
+      setStableSyncStatus("saved");
+      toast.success("Todas as alterações foram sincronizadas!");
+    }
+  }, [setStableSyncStatus]);
+
+  async function dispatchOfflineAction(action: OfflineAction) {
+    switch (action.type) {
+      case "add_task":
+        return supabase.rpc("planner_add_task", { p_name: action.name, p_day: action.day, p_text: action.text });
+      case "remove_task":
+        return supabase.rpc("planner_remove_task", { p_name: action.name, p_day: action.day, p_idx: action.idx });
+      case "toggle_check":
+        return supabase.rpc("planner_toggle_check", { p_name: action.name, p_day: action.day, p_idx: action.idx });
+      case "edit_task":
+        return supabase.rpc("planner_edit_task", { p_name: action.name, p_day: action.day, p_idx: action.idx, p_text: action.text });
+      case "update_meta":
+        return supabase.rpc("planner_update_meta", {
+          p_name: action.name,
+          p_week: action.week,
+          p_icon: action.icon,
+          p_bg_color: action.bg,
+          p_text_color: action.text_color,
+          p_theme: action.theme,
+        });
+    }
+  }
+
+  useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
