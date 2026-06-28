@@ -404,11 +404,6 @@ function Index() {
     });
   };
 
-  const logRpcError = (label: string) =>
-    ({ error }: { error: any }) => {
-      if (error) console.error(`RPC ${label} failed:`, error);
-    };
-
   const pushHistory = (u: UserName, label: string) => {
     setHistory((h) => {
       const snap = structuredClone(state[u]);
@@ -425,12 +420,11 @@ function Index() {
       // Restore local state
       applyLocal(entry.user, () => entry.snapshot);
       // Persist full row to cloud (overwrite). Acceptable for an explicit undo.
-      supabase
-        .from("user_planner")
-        .upsert(userToRow(entry.user, entry.snapshot), { onConflict: "name" })
-        .then(({ error }) => {
-          if (error) console.error("undo upsert failed:", error);
-        });
+      void trackRpc(
+        supabase.from("user_planner").upsert(userToRow(entry.user, entry.snapshot), { onConflict: "name" }),
+        { type: "update_meta", name: entry.user, week: entry.snapshot.week, icon: entry.snapshot.icon, bg: entry.snapshot.customBgColor, text_color: entry.snapshot.customTextColor, theme: entry.snapshot.theme },
+        "Ação desfeita"
+      );
       // Switch to that user so the change is visible
       setActive(entry.user);
       return h.slice(0, -1);
