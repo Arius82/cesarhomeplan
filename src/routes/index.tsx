@@ -38,6 +38,46 @@ type AppState = Record<
 >;
 
 const STORAGE_KEY = "casa-organizada-v1";
+const OFFLINE_QUEUE_KEY = "casa-organizada-offline-queue-v1";
+
+type SyncStatus = "idle" | "saving" | "saved" | "offline" | "error";
+
+type OfflineAction =
+  | { type: "add_task"; name: UserName; day: DayKey; text: string }
+  | { type: "remove_task"; name: UserName; day: DayKey; idx: number }
+  | { type: "toggle_check"; name: UserName; day: DayKey; idx: number }
+  | { type: "edit_task"; name: UserName; day: DayKey; idx: number; text: string }
+  | { type: "update_meta"; name: UserName; week?: string; icon?: string; bg?: string; text_color?: string; theme?: UserTheme };
+
+function getDayLabel(day: DayKey): string {
+  const found = DAYS.find((d) => d.key === day);
+  return found ? found.label : day;
+}
+
+function readOfflineQueue(): OfflineAction[] {
+  try {
+    const raw = localStorage.getItem(OFFLINE_QUEUE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeOfflineQueue(queue: OfflineAction[]) {
+  try {
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+  } catch {}
+}
+
+function enqueueOffline(action: OfflineAction) {
+  const queue = readOfflineQueue();
+  queue.push(action);
+  writeOfflineQueue(queue);
+}
+
+function clearOfflineQueue() {
+  writeOfflineQueue([]);
+}
 
 function makeInitialState(): AppState {
   const state = {} as AppState;
