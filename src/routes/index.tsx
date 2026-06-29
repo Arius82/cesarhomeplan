@@ -1181,7 +1181,7 @@ function PrintSheet({
 
       {/* Footer */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "8pt", color: "#475569", borderTop: `1.5px solid #cbd5e1`, paddingTop: "2.5mm" }}>
-        <span>Gerado com ❤️ por Cesar Home Plan e Lovable</span>
+        <span>Cesar Home Plan</span>
         <div style={{ fontWeight: "600" }}>
           <span>Assinatura: ___________________________</span>
         </div>
