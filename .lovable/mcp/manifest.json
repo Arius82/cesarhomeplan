@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "sdk_version": "0.20.0",
+  "path": "/mcp",
+  "auth": {
+    "type": "none"
+  },
+  "mcp": {
+    "server": {
+      "name": "cesar-home-planner-mcp",
+      "version": "0.1.0",
+      "title": "César Home Planner MCP"
+    },
+    "tools": [
+      {
+        "name": "list_users",
+        "title": "List family members",
+        "description": "List the family members (users) tracked in the César Home Planner.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_days",
+        "title": "List days of the week",
+        "description": "List the days of the week used by the planner (Monday through Saturday, in Portuguese).",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_default_tasks",
+        "title": "Get default tasks",
+        "description": "Get the default household tasks for a given family member. Optionally filter by a specific day of the week. Returns the shipped defaults — not the user's edits, which live in the browser.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "user": {
+              "type": "string",
+              "enum": [
+                "Miguel",
+                "Davi",
+                "Danelle",
+                "Eduardo"
+              ],
+              "description": "The family member's name."
+            },
+            "day": {
+              "description": "Optional day key (e.g. 'segunda'). Omit to get the full week.",
+              "type": "string",
+              "enum": [
+                "segunda",
+                "terca",
+                "quarta",
+                "quinta",
+                "sexta",
+                "sabado"
+              ]
+            }
+          },
+          "required": [
+            "user"
+          ]
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
