@@ -97,7 +97,15 @@ function makeInitialState(): AppState {
 
 function Index() {
   const [state, setState] = useState<AppState>(makeInitialState);
-  const [active, setActive] = useState<UserName>("Miguel");
+  const [activeTab, setActiveTab] = useState<UserName | "compare">("Miguel");
+  const [compareMode, setCompareMode] = useState<"all" | "split">("all");
+  const [splitLeftUser, setSplitLeftUser] = useState<UserName>("Miguel");
+  const [splitRightUser, setSplitRightUser] = useState<UserName>("Davi");
+
+  const active: UserName = activeTab === "compare" ? "Miguel" : activeTab;
+  const setActive = (u: UserName) => {
+    setActiveTab(u);
+  };
   const [loaded, setLoaded] = useState(false);
   const [printMode, setPrintMode] = useState<"active" | "all">("active");
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -431,30 +439,30 @@ function Index() {
     });
   };
 
-  const [pendingRemove, setPendingRemove] = useState<{ day: DayKey; idx: number; text: string } | null>(null);
+  const [pendingRemove, setPendingRemove] = useState<{ day: DayKey; idx: number; text: string; targetUser: UserName } | null>(null);
 
-  const addTask = (day: DayKey, text: string) => {
+  const addTask = (day: DayKey, text: string, targetUser: UserName = active) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    pushHistory(active, `Adicionar tarefa em ${getDayLabel(day)}`);
-    applyLocal(active, (s) => ({ ...s, tasks: { ...s.tasks, [day]: [...s.tasks[day], trimmed] } }));
+    pushHistory(targetUser, `Adicionar tarefa em ${getDayLabel(day)}`);
+    applyLocal(targetUser, (s) => ({ ...s, tasks: { ...s.tasks, [day]: [...s.tasks[day], trimmed] } }));
     void trackRpc(
-      supabase.rpc("planner_add_task", { p_name: active, p_day: day, p_text: trimmed }),
-      { type: "add_task", name: active, day, text: trimmed },
+      supabase.rpc("planner_add_task", { p_name: targetUser, p_day: day, p_text: trimmed }),
+      { type: "add_task", name: targetUser, day, text: trimmed },
       "Tarefa adicionada"
     );
   };
 
-  const removeTask = (day: DayKey, idx: number) => {
-    const taskText = user.tasks[day][idx] || "";
-    setPendingRemove({ day, idx, text: taskText });
+  const removeTask = (day: DayKey, idx: number, targetUser: UserName = active) => {
+    const taskText = state[targetUser].tasks[day][idx] || "";
+    setPendingRemove({ day, idx, text: taskText, targetUser });
   };
 
   const confirmRemoveTask = () => {
     if (!pendingRemove) return;
-    const { day, idx } = pendingRemove;
-    pushHistory(active, `Remover tarefa de ${getDayLabel(day)}`);
-    applyLocal(active, (s) => {
+    const { day, idx, targetUser } = pendingRemove;
+    pushHistory(targetUser, `Remover tarefa de ${getDayLabel(day)}`);
+    applyLocal(targetUser, (s) => {
       const tasks = { ...s.tasks, [day]: s.tasks[day].filter((_, i) => i !== idx) };
       const newChecked = {} as Record<string, boolean>;
       Object.entries(s.checked).forEach(([k, val]) => {
@@ -470,37 +478,37 @@ function Index() {
       return { ...s, tasks, checked: newChecked };
     });
     void trackRpc(
-      supabase.rpc("planner_remove_task", { p_name: active, p_day: day, p_idx: idx }),
-      { type: "remove_task", name: active, day, idx },
+      supabase.rpc("planner_remove_task", { p_name: targetUser, p_day: day, p_idx: idx }),
+      { type: "remove_task", name: targetUser, day, idx },
       "Tarefa removida"
     );
     setPendingRemove(null);
   };
 
-  const toggleCheck = (day: DayKey, idx: number) => {
+  const toggleCheck = (day: DayKey, idx: number, targetUser: UserName = active) => {
     const key = `${day}-${idx}`;
-    pushHistory(active, `Marcar/desmarcar em ${getDayLabel(day)}`);
-    applyLocal(active, (s) => ({ ...s, checked: { ...s.checked, [key]: !s.checked[key] } }));
+    pushHistory(targetUser, `Marcar/desmarcar em ${getDayLabel(day)}`);
+    applyLocal(targetUser, (s) => ({ ...s, checked: { ...s.checked, [key]: !s.checked[key] } }));
     void trackRpc(
-      supabase.rpc("planner_toggle_check", { p_name: active, p_day: day, p_idx: idx }),
-      { type: "toggle_check", name: active, day, idx },
+      supabase.rpc("planner_toggle_check", { p_name: targetUser, p_day: day, p_idx: idx }),
+      { type: "toggle_check", name: targetUser, day, idx },
       undefined,
       { silent: true }
     );
   };
 
-  const editTask = (day: DayKey, idx: number, text: string) => {
+  const editTask = (day: DayKey, idx: number, text: string, targetUser: UserName = active) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    pushHistory(active, `Editar tarefa em ${getDayLabel(day)}`);
-    applyLocal(active, (s) => {
+    pushHistory(targetUser, `Editar tarefa em ${getDayLabel(day)}`);
+    applyLocal(targetUser, (s) => {
       const tasks = { ...s.tasks };
       tasks[day] = tasks[day].map((t, i) => (i === idx ? trimmed : t));
       return { ...s, tasks };
     });
     void trackRpc(
-      supabase.rpc("planner_edit_task", { p_name: active, p_day: day, p_idx: idx, p_text: trimmed }),
-      { type: "edit_task", name: active, day, idx, text: trimmed },
+      supabase.rpc("planner_edit_task", { p_name: targetUser, p_day: day, p_idx: idx, p_text: trimmed }),
+      { type: "edit_task", name: targetUser, day, idx, text: trimmed },
       "Tarefa atualizada"
     );
   };
@@ -613,11 +621,11 @@ function Index() {
         <div className="mb-6 flex flex-wrap gap-1 border-b border-border">
           {USERS.map((u) => {
             const uConfig = state[u];
-            const isSelected = active === u;
+            const isSelected = activeTab === u;
             return (
               <button
                 key={u}
-                onClick={() => setActive(u)}
+                onClick={() => setActiveTab(u)}
                 className={`-mb-px border-b-2 px-5 py-2.5 text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
                   isSelected
                     ? "border-primary text-primary"
@@ -629,6 +637,17 @@ function Index() {
               </button>
             );
           })}
+          <button
+            onClick={() => setActiveTab("compare")}
+            className={`-mb-px border-b-2 px-5 py-2.5 text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === "compare"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30"
+            }`}
+          >
+            <span className="text-base">🔄</span>
+            <span>Comparar Tarefas</span>
+          </button>
         </div>
 
         {/* PWA Installation Banner (no-print) */}
@@ -668,107 +687,247 @@ function Index() {
           </div>
         )}
 
-        {/* Customization Bar */}
-        <div className="mb-6 rounded-xl border border-border bg-muted/30 p-5 shadow-sm transition-all duration-300 flex flex-col gap-4 text-foreground">
-          <div className="flex flex-wrap items-center gap-6">
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-bold">Semana:</label>
-              <input
-                value={user.week}
-                onChange={(e) => setWeek(e.target.value)}
-                placeholder="ex: 23/06 a 28/06"
-                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm w-44 focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold">Figura:</span>
-              <div className="flex flex-wrap gap-1">
-                {ICONS.map((ic) => (
+        {/* Customization or Comparison Bar */}
+        {activeTab === "compare" ? (
+          <div className="mb-6 rounded-xl border border-border bg-muted/30 p-5 shadow-sm transition-all duration-300 flex flex-col gap-4 text-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold">Modo de Comparação:</span>
+                <div className="flex gap-2">
                   <button
-                    key={ic.char}
-                    onClick={() => setIcon(ic.char)}
-                    title={ic.label}
-                    className={`h-8 w-8 rounded text-lg flex items-center justify-center transition-all cursor-pointer ${
-                      user.icon === ic.char
-                        ? "bg-background shadow border border-border scale-110"
-                        : "hover:bg-background/40 border border-transparent"
+                    onClick={() => setCompareMode("all")}
+                    className={`px-4 py-2 text-xs font-bold rounded-md transition-all shadow-sm cursor-pointer ${
+                      compareMode === "all"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background border border-border text-foreground hover:bg-muted"
                     }`}
                   >
-                    {ic.char}
+                    📋 Visão Geral (Todos)
                   </button>
-                ))}
+                  <button
+                    onClick={() => setCompareMode("split")}
+                    className={`px-4 py-2 text-xs font-bold rounded-md transition-all shadow-sm cursor-pointer ${
+                      compareMode === "split"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background border border-border text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    🥞 Lado a Lado (Split View)
+                  </button>
+                </div>
+              </div>
+
+              {compareMode === "split" && (
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold opacity-75">Esquerda:</span>
+                    <select
+                      value={splitLeftUser}
+                      onChange={(e) => setSplitLeftUser(e.target.value as UserName)}
+                      className="rounded-md border border-input bg-background px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    >
+                      {USERS.map((u) => (
+                        <option key={u} value={u}>
+                          {state[u].icon} {u}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold opacity-75">Direita:</span>
+                    <select
+                      value={splitRightUser}
+                      onChange={(e) => setSplitRightUser(e.target.value as UserName)}
+                      className="rounded-md border border-input bg-background px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    >
+                      {USERS.map((u) => (
+                        <option key={u} value={u}>
+                          {state[u].icon} {u}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="mb-6 rounded-xl border border-border bg-muted/30 p-5 shadow-sm transition-all duration-300 flex flex-col gap-4 text-foreground">
+            <div className="flex flex-wrap items-center gap-6">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-bold">Semana:</label>
+                <input
+                  value={user.week}
+                  onChange={(e) => setWeek(e.target.value)}
+                  placeholder="ex: 23/06 a 28/06"
+                  className="rounded-md border border-input bg-background px-3 py-1.5 text-sm w-44 focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold">Figura:</span>
+                <div className="flex flex-wrap gap-1">
+                  {ICONS.map((ic) => (
+                    <button
+                      key={ic.char}
+                      onClick={() => setIcon(ic.char)}
+                      title={ic.label}
+                      className={`h-8 w-8 rounded text-lg flex items-center justify-center transition-all cursor-pointer ${
+                        user.icon === ic.char
+                          ? "bg-background shadow border border-border scale-110"
+                          : "hover:bg-background/40 border border-transparent"
+                      }`}
+                    >
+                      {ic.char}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-6 border-t border-border pt-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold">Cor de Fundo do Dia:</span>
+                <input
+                  type="color"
+                  value={user.customBgColor}
+                  onChange={(e) => setCustomBgColor(e.target.value)}
+                  className="h-8 w-8 cursor-pointer rounded border border-input bg-transparent p-0.5"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold">Cor da Letra do Dia:</span>
+                <input
+                  type="color"
+                  value={user.customTextColor}
+                  onChange={(e) => setCustomTextColor(e.target.value)}
+                  className="h-8 w-8 cursor-pointer rounded border border-input bg-transparent p-0.5"
+                />
+              </div>
+
+              <div className="h-6 w-px bg-border hidden md:block"></div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs font-bold opacity-75">Predefinições:</span>
+                {Object.entries(THEMES).map(([key, cfg]) => {
+                  const themeKey = key as UserTheme;
+                  let dotColor = "bg-blue-500";
+                  if (themeKey === "emerald") dotColor = "bg-emerald-500";
+                  if (themeKey === "amber") dotColor = "bg-amber-500";
+                  if (themeKey === "pink") dotColor = "bg-pink-500";
+                  if (themeKey === "slate") dotColor = "bg-slate-500";
+
+                  return (
+                    <button
+                      key={themeKey}
+                      onClick={() => applyThemePreset(themeKey)}
+                      title={cfg.name}
+                      className="px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all border border-border hover:bg-muted cursor-pointer"
+                    >
+                      <span className={`h-2 w-2 rounded-full ${dotColor}`}></span>
+                      {cfg.name}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
+        )}
 
-          <div className="flex flex-wrap items-center gap-6 border-t border-border pt-4">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold">Cor de Fundo do Dia:</span>
-              <input
-                type="color"
-                value={user.customBgColor}
-                onChange={(e) => setCustomBgColor(e.target.value)}
-                className="h-8 w-8 cursor-pointer rounded border border-input bg-transparent p-0.5"
+        {/* Days Grid or Comparative Grid */}
+        {activeTab === "compare" ? (
+          compareMode === "all" ? (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+              {DAYS.map((d) => (
+                <AllUsersDayCard
+                  key={d.key}
+                  day={d.key}
+                  label={d.label}
+                  state={state}
+                  onToggle={toggleCheck}
+                  onAdd={addTask}
+                  onRemove={removeTask}
+                  onEdit={editTask}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Left Column */}
+              <div className="space-y-6">
+                <div className="flex items-center gap-3 border-b border-border pb-3">
+                  <span className="text-2xl">{state[splitLeftUser].icon}</span>
+                  <h2 className="text-xl font-bold" style={{ color: state[splitLeftUser].customTextColor }}>
+                    Cronograma de {splitLeftUser}
+                  </h2>
+                </div>
+                <div className="grid grid-cols-1 gap-5">
+                  {DAYS.map((d) => (
+                    <DayCard
+                      key={`left-${d.key}`}
+                      day={d.key}
+                      label={d.label}
+                      tasks={state[splitLeftUser].tasks[d.key]}
+                      checked={state[splitLeftUser].checked}
+                      onToggle={(day, idx) => toggleCheck(day, idx, splitLeftUser)}
+                      onAdd={(day, text) => addTask(day, text, splitLeftUser)}
+                      onRemove={(day, idx) => removeTask(day, idx, splitLeftUser)}
+                      onEdit={(day, idx, text) => editTask(day, idx, text, splitLeftUser)}
+                      customBgColor={state[splitLeftUser].customBgColor}
+                      customTextColor={state[splitLeftUser].customTextColor}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Right Column */}
+              <div className="space-y-6">
+                <div className="flex items-center gap-3 border-b border-border pb-3">
+                  <span className="text-2xl">{state[splitRightUser].icon}</span>
+                  <h2 className="text-xl font-bold" style={{ color: state[splitRightUser].customTextColor }}>
+                    Cronograma de {splitRightUser}
+                  </h2>
+                </div>
+                <div className="grid grid-cols-1 gap-5">
+                  {DAYS.map((d) => (
+                    <DayCard
+                      key={`right-${d.key}`}
+                      day={d.key}
+                      label={d.label}
+                      tasks={state[splitRightUser].tasks[d.key]}
+                      checked={state[splitRightUser].checked}
+                      onToggle={(day, idx) => toggleCheck(day, idx, splitRightUser)}
+                      onAdd={(day, text) => addTask(day, text, splitRightUser)}
+                      onRemove={(day, idx) => removeTask(day, idx, splitRightUser)}
+                      onEdit={(day, idx, text) => editTask(day, idx, text, splitRightUser)}
+                      customBgColor={state[splitRightUser].customBgColor}
+                      customTextColor={state[splitRightUser].customTextColor}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )
+        ) : (
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {DAYS.map((d) => (
+              <DayCard
+                key={d.key}
+                day={d.key}
+                label={d.label}
+                tasks={user.tasks[d.key]}
+                checked={user.checked}
+                onToggle={(day, idx) => toggleCheck(day, idx, active)}
+                onAdd={(day, text) => addTask(day, text, active)}
+                onRemove={(day, idx) => removeTask(day, idx, active)}
+                onEdit={(day, idx, text) => editTask(day, idx, text, active)}
+                customBgColor={user.customBgColor}
+                customTextColor={user.customTextColor}
               />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold">Cor da Letra do Dia:</span>
-              <input
-                type="color"
-                value={user.customTextColor}
-                onChange={(e) => setCustomTextColor(e.target.value)}
-                className="h-8 w-8 cursor-pointer rounded border border-input bg-transparent p-0.5"
-              />
-            </div>
-
-            <div className="h-6 w-px bg-border hidden md:block"></div>
-
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs font-bold opacity-75">Predefinições:</span>
-              {Object.entries(THEMES).map(([key, cfg]) => {
-                const themeKey = key as UserTheme;
-                let dotColor = "bg-blue-500";
-                if (themeKey === "emerald") dotColor = "bg-emerald-500";
-                if (themeKey === "amber") dotColor = "bg-amber-500";
-                if (themeKey === "pink") dotColor = "bg-pink-500";
-                if (themeKey === "slate") dotColor = "bg-slate-500";
-
-                return (
-                  <button
-                    key={themeKey}
-                    onClick={() => applyThemePreset(themeKey)}
-                    title={cfg.name}
-                    className="px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all border border-border hover:bg-muted cursor-pointer"
-                  >
-                    <span className={`h-2 w-2 rounded-full ${dotColor}`}></span>
-                    {cfg.name}
-                  </button>
-                );
-              })}
-            </div>
+            ))}
           </div>
-        </div>
-
-        {/* Days Grid */}
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {DAYS.map((d) => (
-            <DayCard
-              key={d.key}
-              day={d.key}
-              label={d.label}
-              tasks={user.tasks[d.key]}
-              checked={user.checked}
-              onToggle={toggleCheck}
-              onAdd={addTask}
-              onRemove={removeTask}
-              onEdit={editTask}
-              customBgColor={user.customBgColor}
-              customTextColor={user.customTextColor}
-            />
-          ))}
-        </div>
+        )}
 
         {/* Delete confirmation dialog */}
         <AlertDialog open={!!pendingRemove} onOpenChange={(open) => !open && setPendingRemove(null)}>
@@ -1030,6 +1189,132 @@ function DayCard({
         >
           +
         </button>
+      </form>
+    </div>
+  );
+}
+
+function AllUsersDayCard({
+  day,
+  label,
+  state,
+  onToggle,
+  onAdd,
+  onRemove,
+  onEdit,
+}: {
+  day: DayKey;
+  label: string;
+  state: AppState;
+  onToggle: (d: DayKey, i: number, u: UserName) => void;
+  onAdd: (d: DayKey, t: string, u: UserName) => void;
+  onRemove: (d: DayKey, i: number, u: UserName) => void;
+  onEdit: (d: DayKey, i: number, t: string, u: UserName) => void;
+}) {
+  const [text, setText] = useState("");
+  const [selectedUser, setSelectedUser] = useState<UserName>("Miguel");
+
+  const totalTasks = USERS.reduce((acc, u) => acc + (state[u].tasks[day]?.length || 0), 0);
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5 shadow-sm transition-all duration-200 text-card-foreground flex flex-col justify-between min-h-[300px]">
+      <div>
+        <h3 className="mb-4 -mx-5 -mt-5 p-3 text-center text-sm font-extrabold tracking-wider rounded-t-xl border-b bg-secondary text-secondary-foreground">
+          {label}
+        </h3>
+
+        <div className="space-y-4 mb-4">
+          {USERS.map((u) => {
+            const userTasks = state[u].tasks[day] || [];
+            if (userTasks.length === 0) return null;
+            return (
+              <div key={u} className="border-b border-border/10 pb-3 last:border-b-0 last:pb-0">
+                <div 
+                  className="flex items-center gap-1.5 text-xs font-black mb-2 px-2 py-0.5 rounded-md w-fit border"
+                  style={{
+                    backgroundColor: `${state[u].customBgColor}15`,
+                    color: state[u].customTextColor,
+                    borderColor: `${state[u].customTextColor}30`
+                  }}
+                >
+                  <span>{state[u].icon}</span>
+                  <span>{u}</span>
+                </div>
+                <ul className="space-y-2">
+                  {userTasks.map((t, i) => {
+                    const key = `${day}-${i}`;
+                    const isChecked = !!state[u].checked[key];
+                    return (
+                      <TaskItem
+                        key={`${u}-${key}`}
+                        day={day}
+                        idx={i}
+                        text={t}
+                        isChecked={isChecked}
+                        customTextColor={state[u].customTextColor}
+                        onToggle={(d, idx) => onToggle(d, idx, u)}
+                        onRemove={(d, idx) => onRemove(d, idx, u)}
+                        onEdit={(d, idx, txt) => onEdit(d, idx, txt, u)}
+                      />
+                    );
+                  })}
+                </ul>
+              </div>
+            );
+          })}
+
+          {totalTasks === 0 && (
+            <div className="text-xs opacity-50 italic flex items-center justify-center h-28">
+              Nenhuma tarefa cadastrada
+            </div>
+          )}
+        </div>
+      </div>
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onAdd(day, text, selectedUser);
+          setText("");
+        }}
+        className="mt-auto pt-3 border-t border-border/30 flex flex-col gap-2"
+      >
+        <div className="flex gap-1.5 items-center">
+          <span className="text-xs font-bold text-muted-foreground">Para:</span>
+          <div className="flex flex-wrap gap-1 flex-1">
+            {USERS.map((u) => {
+              const isSel = selectedUser === u;
+              return (
+                <button
+                  type="button"
+                  key={u}
+                  onClick={() => setSelectedUser(u)}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer border ${
+                    isSel
+                      ? "bg-primary border-primary text-primary-foreground"
+                      : "bg-muted border-border text-muted-foreground hover:bg-muted/80"
+                  }`}
+                >
+                  {state[u].icon} {u}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Adicionar tarefa..."
+            className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring transition-all placeholder:text-muted-foreground/50 text-foreground"
+          />
+          <button
+            type="submit"
+            className="rounded-md bg-primary text-primary-foreground px-3.5 py-1.5 text-sm font-semibold shadow-sm transition-all active:scale-95 hover:bg-primary/90 cursor-pointer"
+          >
+            +
+          </button>
+        </div>
       </form>
     </div>
   );
