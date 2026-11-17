@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { DAYS, INITIAL_TASKS, USERS, type DayKey, type UserName, type WeekTasks, type UserTheme, THEMES, ICONS, DEFAULT_USER_SETTINGS, PRESET_COLORS } from "@/lib/initial-tasks";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { MonthlyView, MonthlyPrintSheet, useMonthlyRoutines } from "@/components/monthly/MonthlyView";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -108,6 +109,9 @@ function Index() {
   };
   const [loaded, setLoaded] = useState(false);
   const [printMode, setPrintMode] = useState<"active" | "all">("active");
+  const [viewMode, setViewMode] = useState<"weekly" | "monthly">("weekly");
+  const [monthCursor, setMonthCursor] = useState<Date>(() => { const t = new Date(); return new Date(t.getFullYear(), t.getMonth(), 1); });
+  const monthly = useMonthlyRoutines();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
 
@@ -910,6 +914,19 @@ function Index() {
             </div>
           )
         ) : (
+          <>
+          <div className="mb-4 inline-flex rounded-lg border border-border p-1 gap-1">
+            {(["weekly", "monthly"] as const).map((m) => (
+              <button key={m} onClick={() => setViewMode(m)}
+                className={`px-4 py-1.5 text-sm font-bold rounded-md cursor-pointer transition-all ${viewMode === m ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"}`}>
+                {m === "weekly" ? "📋 Semanal" : "📅 Mensal"}
+              </button>
+            ))}
+          </div>
+          {viewMode === "monthly" ? (
+            <MonthlyView user={active} cursor={monthCursor} setCursor={setMonthCursor} api={monthly}
+              customBgColor={user.customBgColor} customTextColor={user.customTextColor} />
+          ) : (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
             {DAYS.map((d) => (
               <DayCard
@@ -927,6 +944,8 @@ function Index() {
               />
             ))}
           </div>
+          )}
+          </>
         )}
 
         {/* Delete confirmation dialog */}
@@ -950,6 +969,10 @@ function Index() {
 
       {/* Printable Containers (Always rendered but toggle class hides/shows during printing) */}
       <div className="print-active-sheet">
+        {viewMode === "monthly" && activeTab !== "compare" ? (
+          <MonthlyPrintSheet user={active} icon={user.icon} cursor={monthCursor} routines={monthly.routines}
+            customBgColor={user.customBgColor} customTextColor={user.customTextColor} />
+        ) : (
         <PrintSheet
           user={active}
           week={user.week}
@@ -958,6 +981,7 @@ function Index() {
           customTextColor={user.customTextColor}
           icon={user.icon}
         />
+        )}
       </div>
 
       <div className="print-all-sheets">
@@ -965,6 +989,10 @@ function Index() {
           const uConfig = state[u];
           return (
             <div key={u} className="print-page-break">
+              {viewMode === "monthly" && activeTab !== "compare" ? (
+                <MonthlyPrintSheet user={u} icon={uConfig.icon} cursor={monthCursor} routines={monthly.routines}
+                  customBgColor={uConfig.customBgColor} customTextColor={uConfig.customTextColor} />
+              ) : (
               <PrintSheet
                 user={u}
                 week={uConfig.week}
@@ -973,6 +1001,7 @@ function Index() {
                 customTextColor={uConfig.customTextColor}
                 icon={uConfig.icon}
               />
+              )}
             </div>
           );
         })}

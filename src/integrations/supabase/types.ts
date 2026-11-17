@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      monthly_routines: {
+        Row: {
+          completed: Json
+          created_at: string
+          day_of_month: number | null
+          id: string
+          specific_date: string | null
+          title: string
+          updated_at: string
+          user_name: string
+        }
+        Insert: {
+          completed?: Json
+          created_at?: string
+          day_of_month?: number | null
+          id?: string
+          specific_date?: string | null
+          title: string
+          updated_at?: string
+          user_name: string
+        }
+        Update: {
+          completed?: Json
+          created_at?: string
+          day_of_month?: number | null
+          id?: string
+          specific_date?: string | null
+          title?: string
+          updated_at?: string
+          user_name?: string
+        }
+        Relationships: []
+      }
       user_planner: {
         Row: {
           checked: Json
