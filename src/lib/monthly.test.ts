@@ -20,3 +20,19 @@ describe("rotinas mensais", () => {
     expect(routineOccursOn(r, new Date(2026, 11, 25))).toBe(false);
   });
 });
+
+import { monthlyForWeek as mfw } from "./monthly";
+describe("monthlyForWeek", () => {
+  const mk = (o: Partial<import("./monthly").Routine>) => ({ id: "x", user_name: "Miguel", title: "t", day_of_month: null, specific_date: null, completed: [], updated_at: "", ...o });
+  it("places a day-of-month routine on its weekday column of the current week", () => {
+    // Wed 18 Nov 2026 -> week Mon 16 .. Sun 22
+    const cols = mfw([mk({ day_of_month: 19 })], "Miguel", new Date(2026, 10, 18));
+    expect(cols[3].length).toBe(1); // Thursday
+    expect(cols.flat().length).toBe(1);
+  });
+  it("puts Sunday routines on Saturday and ignores other users", () => {
+    const cols = mfw([mk({ day_of_month: 22 }), mk({ day_of_month: 17, user_name: "Davi" })], "Miguel", new Date(2026, 10, 18));
+    expect(cols[5][0].isSunday).toBe(true);
+    expect(cols.flat().length).toBe(1);
+  });
+});

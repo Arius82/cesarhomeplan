@@ -4,6 +4,7 @@ import { DAYS, INITIAL_TASKS, USERS, type DayKey, type UserName, type WeekTasks,
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { MonthlyView, MonthlyPrintSheet, useMonthlyRoutines } from "@/components/monthly/MonthlyView";
+import { monthlyForWeek, isDone, type WeekMonthlyItem } from "@/lib/monthly";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -112,6 +113,12 @@ function Index() {
   const [viewMode, setViewMode] = useState<"weekly" | "monthly">("weekly");
   const [monthCursor, setMonthCursor] = useState<Date>(() => { const t = new Date(); return new Date(t.getFullYear(), t.getMonth(), 1); });
   const monthly = useMonthlyRoutines();
+  const [today, setToday] = useState<Date | null>(null);
+  useEffect(() => setToday(new Date()), []);
+  const weekMonthly = useMemo(
+    () => (today ? monthlyForWeek(monthly.routines, active, today) : [[], [], [], [], [], []]),
+    [monthly.routines, active, today],
+  );
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
 
@@ -928,11 +935,13 @@ function Index() {
               customBgColor={user.customBgColor} customTextColor={user.customTextColor} />
           ) : (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {DAYS.map((d) => (
+            {DAYS.map((d, di) => (
               <DayCard
                 key={d.key}
                 day={d.key}
                 label={d.label}
+                monthlyItems={weekMonthly[di]}
+                onToggleMonthly={(it) => monthly.toggle(it.routine, it.date)}
                 tasks={user.tasks[d.key]}
                 checked={user.checked}
                 onToggle={(day, idx) => toggleCheck(day, idx, active)}
@@ -1148,7 +1157,11 @@ function DayCard({
   onEdit,
   customBgColor,
   customTextColor,
+  monthlyItems = [],
+  onToggleMonthly,
 }: {
+  monthlyItems?: WeekMonthlyItem[];
+  onToggleMonthly?: (it: WeekMonthlyItem) => void;
   day: DayKey;
   label: string;
   tasks: string[];
@@ -1192,7 +1205,27 @@ function DayCard({
             />
           );
         })}
-        {tasks.length === 0 && (
+        {monthlyItems.map((it) => {
+          const done = isDone(it.routine, it.date);
+          return (
+            <li key={`m-${it.routine.id}`} className="flex items-start gap-2 rounded-md border border-dashed border-border bg-muted/40 px-2 py-1.5">
+              <input
+                type="checkbox"
+                checked={done}
+                onChange={() => onToggleMonthly?.(it)}
+                className="mt-0.5 h-4 w-4 cursor-pointer"
+                aria-label={`Concluir rotina mensal ${it.routine.title}`}
+              />
+              <span className={`flex-1 text-sm italic ${done ? "line-through opacity-50" : ""}`}>
+                {it.routine.title}
+                <span className="ml-1.5 inline-block rounded bg-secondary px-1.5 py-0.5 text-[10px] font-bold not-italic text-secondary-foreground align-middle">
+                  📅 Mensal{it.isSunday ? " · domingo" : ""} {String(it.date.getDate()).padStart(2, "0")}/{String(it.date.getMonth() + 1).padStart(2, "0")}
+                </span>
+              </span>
+            </li>
+          );
+        })}
+        {tasks.length === 0 && monthlyItems.length === 0 && (
           <li className="text-xs opacity-50 italic flex items-center justify-center h-20">
             Nenhuma tarefa cadastrada
           </li>
