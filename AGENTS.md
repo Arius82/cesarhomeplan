@@ -8,3 +8,5 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Monthly routines live in their own table (`monthly_routines`) with their own hook/realtime channel in `src/components/monthly/`; recurrence rules are in `src/lib/monthly.ts` (tested). Why: keeps weekly planner RPCs untouched.
