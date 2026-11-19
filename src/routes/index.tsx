@@ -115,9 +115,22 @@ function Index() {
   const monthly = useMonthlyRoutines();
   const [today, setToday] = useState<Date | null>(null);
   useEffect(() => setToday(new Date()), []);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const weekRef = useMemo(
+    () => (today ? new Date(today.getFullYear(), today.getMonth(), today.getDate() + weekOffset * 7) : null),
+    [today, weekOffset],
+  );
+  const weekRange = useMemo(() => {
+    if (!weekRef) return "";
+    const off = (weekRef.getDay() + 6) % 7;
+    const mon = new Date(weekRef.getFullYear(), weekRef.getMonth(), weekRef.getDate() - off);
+    const sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6);
+    const f = (d: Date) => `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return `${f(mon)} a ${f(sun)}`;
+  }, [weekRef]);
   const weekMonthly = useMemo(
-    () => (today ? monthlyForWeek(monthly.routines, active, today) : [[], [], [], [], [], []]),
-    [monthly.routines, active, today],
+    () => (weekRef ? monthlyForWeek(monthly.routines, active, weekRef) : [[], [], [], [], [], []]),
+    [monthly.routines, active, weekRef],
   );
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
@@ -934,6 +947,16 @@ function Index() {
             <MonthlyView user={active} cursor={monthCursor} setCursor={setMonthCursor} api={monthly}
               customBgColor={user.customBgColor} customTextColor={user.customTextColor} />
           ) : (
+          <>
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <button aria-label="Semana anterior" onClick={() => setWeekOffset((w) => w - 1)}
+              className="h-9 w-9 rounded-md border border-border font-bold cursor-pointer hover:bg-muted">‹</button>
+            <span className="min-w-[8.5rem] text-center text-sm font-bold">Semana {weekRange}</span>
+            <button aria-label="Próxima semana" onClick={() => setWeekOffset((w) => w + 1)}
+              className="h-9 w-9 rounded-md border border-border font-bold cursor-pointer hover:bg-muted">›</button>
+            <button onClick={() => setWeekOffset(0)} disabled={weekOffset === 0}
+              className="h-9 px-3 rounded-md border border-border text-sm font-bold cursor-pointer hover:bg-muted disabled:opacity-40 disabled:cursor-default">Semana atual</button>
+          </div>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
             {DAYS.map((d, di) => (
               <DayCard
@@ -953,6 +976,7 @@ function Index() {
               />
             ))}
           </div>
+          </>
           )}
           </>
         )}
