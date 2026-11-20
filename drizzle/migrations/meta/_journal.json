@@ -15,6 +15,13 @@
       "when": 1795049479892,
       "tag": "0001_require_login_for_planner",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795133625610,
+      "tag": "0002_remove_login_requirement",
+      "breakpoints": true
     }
   ]
 }

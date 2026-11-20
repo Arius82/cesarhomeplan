@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { DAYS, INITIAL_TASKS, USERS, type DayKey, type UserName, type WeekTasks, type UserTheme, THEMES, ICONS, DEFAULT_USER_SETTINGS, PRESET_COLORS } from "@/lib/initial-tasks";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { AuthGate } from "@/components/auth/AuthGate";
 import { MonthlyView, MonthlyPrintSheet, useMonthlyRoutines } from "@/components/monthly/MonthlyView";
 import { monthlyForWeek, isDone, type WeekMonthlyItem } from "@/lib/monthly";
 import {
@@ -28,11 +27,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
-  return (
-    <AuthGate>
-      <Planner />
-    </AuthGate>
-  );
+  return <Planner />;
 }
 
 type AppState = Record<
