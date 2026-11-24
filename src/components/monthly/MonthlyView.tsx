@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { RoutineActions } from "./RoutineActions";
 import { type Routine, monthGrid, routineOccursOn, isDone, dateKey, MONTH_NAMES, WEEKDAY_SHORT } from "@/lib/monthly";
 
 const db = supabase as any;
@@ -43,14 +40,16 @@ export function useMonthlyRoutines() {
     report(error, "Rotina adicionada");
   };
   const update = async (id: string, patch: Partial<Routine>) => {
-    setRoutines((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-    const { error } = await db.from("monthly_routines").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id);
+    const { data, error } = await db.from("monthly_routines").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id).select().single();
+    if (!error && data) setRoutines((prev) => prev.map((r) => (r.id === id ? data as Routine : r)));
     report(error);
+    return !error && !!data;
   };
   const remove = async (id: string) => {
-    setRoutines((prev) => prev.filter((r) => r.id !== id));
-    const { error } = await db.from("monthly_routines").delete().eq("id", id);
+    const { data, error } = await db.from("monthly_routines").delete().eq("id", id).select("id").single();
+    if (!error && data) setRoutines((prev) => prev.filter((r) => r.id !== id));
     report(error, "Rotina excluída");
+    return !error && !!data;
   };
   const toggle = async (r: Routine, d: Date) => {
     const k = dateKey(d);
@@ -67,8 +66,7 @@ export function MonthlyView({ user, cursor, setCursor, api, customBgColor, custo
 }) {
   const today = new Date();
   const [selected, setSelected] = useState<Date>(today);
-  const [form, setForm] = useState<{ id?: string; title: string; mode: "monthly" | "once" } | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<Routine | null>(null);
+  const [form, setForm] = useState<{ title: string; mode: "monthly" | "once" } | null>(null);
   const mine = api.routines.filter((r) => r.user_name === user);
   const cells = monthGrid(cursor);
   const dayRoutines = mine.filter((r) => routineOccursOn(r, selected));
@@ -86,8 +84,7 @@ export function MonthlyView({ user, cursor, setCursor, api, customBgColor, custo
       day_of_month: form.mode === "monthly" ? selected.getDate() : null,
       specific_date: form.mode === "once" ? dateKey(selected) : null,
     };
-    if (form.id) { await api.update(form.id, payload); toast.success("Rotina atualizada"); }
-    else await api.add({ ...payload, user_name: user });
+    await api.add({ ...payload, user_name: user });
     setForm(null);
   };
 
@@ -141,8 +138,7 @@ export function MonthlyView({ user, cursor, setCursor, api, customBgColor, custo
                 <p className={`text-sm ${isDone(r, selected) ? "line-through opacity-60" : ""}`}>{r.title}</p>
                 <p className="text-[11px] text-muted-foreground">{r.specific_date ? "Somente nesta data" : `Todo dia ${r.day_of_month}`}</p>
               </div>
-              <button onClick={() => setForm({ id: r.id, title: r.title, mode: r.specific_date ? "once" : "monthly" })} className="text-xs px-2 py-1 rounded hover:bg-muted cursor-pointer" aria-label="Editar rotina">✏️</button>
-              <button onClick={() => setPendingDelete(r)} className="text-xs px-2 py-1 rounded hover:bg-muted cursor-pointer" aria-label="Excluir rotina">🗑️</button>
+              <RoutineActions routine={r} date={selected} onUpdate={api.update} onRemove={api.remove} />
             </div>
           ))}
 
@@ -165,18 +161,6 @@ export function MonthlyView({ user, cursor, setCursor, api, customBgColor, custo
         </div>
       </div>
 
-      <AlertDialog open={!!pendingDelete} onOpenChange={(o) => !o && setPendingDelete(null)}>
-        <AlertDialogContent className="no-print">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir rotina?</AlertDialogTitle>
-            <AlertDialogDescription>Tem certeza que deseja remover a rotina "{pendingDelete?.title}"? Ela sairá de todos os meses.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { if (pendingDelete) void api.remove(pendingDelete.id); setPendingDelete(null); }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Excluir</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

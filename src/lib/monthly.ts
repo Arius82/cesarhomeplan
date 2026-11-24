@@ -16,6 +16,20 @@ export function dateKey(d: Date) {
   return `${monthKey(d)}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+export function routineEditPatch(title: string, mode: "monthly" | "once", day: number, date: string) {
+  if (!title.trim()) return null;
+  if (mode === "monthly" && (!Number.isInteger(day) || day < 1 || day > 31)) return null;
+  if (mode === "once") {
+    const parsed = new Date(`${date}T12:00:00`);
+    if (Number.isNaN(parsed.getTime()) || dateKey(parsed) !== date) return null;
+  }
+  return {
+    title: title.trim(),
+    day_of_month: mode === "monthly" ? day : null,
+    specific_date: mode === "once" ? date : null,
+  };
+}
+
 /** A routine fixed on day N repeats monthly; on short months, days beyond the last day fall on the last day. */
 export function routineOccursOn(r: Routine, d: Date): boolean {
   if (r.specific_date) return r.specific_date === dateKey(d);

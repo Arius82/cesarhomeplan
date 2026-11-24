@@ -1,0 +1,2 @@
+- [x] Compartilhar edição e confirmação de exclusão entre calendário e semana.
+- [x] Verificar edição de nome/data, exclusão e persistência no celular e computador.

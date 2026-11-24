@@ -4,7 +4,8 @@ import { DAYS, INITIAL_TASKS, USERS, type DayKey, type UserName, type WeekTasks,
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { MonthlyView, MonthlyPrintSheet, useMonthlyRoutines } from "@/components/monthly/MonthlyView";
-import { monthlyForWeek, isDone, type WeekMonthlyItem } from "@/lib/monthly";
+import { RoutineActions } from "@/components/monthly/RoutineActions";
+import { monthlyForWeek, isDone, type Routine, type WeekMonthlyItem } from "@/lib/monthly";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,8 +20,12 @@ import {
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Uma casa organizada é uma casa feliz" },
-      { name: "description", content: "Organize as tarefas domésticas semanais de cada membro da família." },
+      { title: "Cesar Home Plan — Tarefas da família" },
+      { name: "description", content: "Organize as tarefas semanais e rotinas mensais de cada pessoa da família, com calendário e impressão." },
+      { property: "og:title", content: "Cesar Home Plan — Tarefas da família" },
+      { property: "og:description", content: "Tarefas semanais e rotinas mensais individuais, com calendário e impressão para a família." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: Index,
@@ -969,6 +974,8 @@ function Planner() {
                 label={d.label}
                 monthlyItems={weekMonthly[di]}
                 onToggleMonthly={(it) => monthly.toggle(it.routine, it.date)}
+                onUpdateMonthly={monthly.update}
+                onRemoveMonthly={monthly.remove}
                 tasks={user.tasks[d.key]}
                 checked={user.checked}
                 onToggle={(day, idx) => toggleCheck(day, idx, active)}
@@ -1187,9 +1194,13 @@ function DayCard({
   customTextColor,
   monthlyItems = [],
   onToggleMonthly,
+  onUpdateMonthly,
+  onRemoveMonthly,
 }: {
   monthlyItems?: WeekMonthlyItem[];
   onToggleMonthly?: (it: WeekMonthlyItem) => void;
+  onUpdateMonthly?: (id: string, patch: Partial<Routine>) => Promise<boolean>;
+  onRemoveMonthly?: (id: string) => Promise<boolean>;
   day: DayKey;
   label: string;
   tasks: string[];
@@ -1241,15 +1252,16 @@ function DayCard({
                 type="checkbox"
                 checked={done}
                 onChange={() => onToggleMonthly?.(it)}
-                className="mt-0.5 h-4 w-4 cursor-pointer"
+                className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer"
                 aria-label={`Concluir rotina mensal ${it.routine.title}`}
               />
-              <span className={`flex-1 text-sm italic ${done ? "line-through opacity-50" : ""}`}>
+              <span className={`min-w-0 flex-1 break-words text-sm italic ${done ? "line-through opacity-50" : ""}`}>
                 {it.routine.title}
                 <span className="ml-1.5 inline-block rounded bg-secondary px-1.5 py-0.5 text-[10px] font-bold not-italic text-secondary-foreground align-middle">
                   📅 Mensal{it.isSunday ? " · domingo" : ""} {String(it.date.getDate()).padStart(2, "0")}/{String(it.date.getMonth() + 1).padStart(2, "0")}
                 </span>
               </span>
+              {onUpdateMonthly && onRemoveMonthly && <RoutineActions routine={it.routine} date={it.date} onUpdate={onUpdateMonthly} onRemove={onRemoveMonthly} />}
             </li>
           );
         })}
