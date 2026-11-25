@@ -176,16 +176,33 @@ export function MonthlyPrintSheet({ user, icon, cursor, routines, customBgColor,
     <div className="print-sheet-content" style={{ padding: "5mm", fontFamily: "system-ui, -apple-system, sans-serif", color: "#0f172a", backgroundColor: "#ffffff", border: "2.5px solid #1e293b", borderRadius: "12px", height: "185mm", display: "flex", flexDirection: "column", justifyContent: "space-between", boxSizing: "border-box", pageBreakInside: "avoid" }}>
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "3mm" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ fontSize: "24pt" }}>{icon}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "36px",
+                height: "36px",
+                borderRadius: "8px",
+                backgroundColor: customTextColor,
+                color: "#ffffff",
+                fontSize: "16pt",
+                fontWeight: "900",
+                WebkitPrintColorAdjust: "exact",
+                printColorAdjust: "exact",
+              }}
+            >
+              {user.charAt(0)}
+            </span>
             <div style={{ display: "flex", flexDirection: "column" }}>
               <span style={{ fontSize: "17pt", fontWeight: 900, textTransform: "uppercase", color: "#1e293b" }}>{user}</span>
               <span style={{ fontSize: "8.5pt", color: "#64748b", fontWeight: 600 }}>Rotinas Mensais</span>
             </div>
           </div>
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: "13pt", fontWeight: 800, color: "#1e293b" }}>Uma casa organizada é uma casa feliz 😊</div>
-            <div style={{ fontSize: "12pt", fontWeight: 800, marginTop: "3px" }}>{MONTH_NAMES[cursor.getMonth()]} {cursor.getFullYear()}</div>
+            <div style={{ fontSize: "12pt", fontWeight: 800, color: "#1e293b" }}>Uma casa organizada é uma casa feliz</div>
+            <div style={{ fontSize: "11pt", fontWeight: 800, marginTop: "3px" }}>{MONTH_NAMES[cursor.getMonth()]} {cursor.getFullYear()}</div>
           </div>
         </div>
         <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
