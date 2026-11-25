@@ -30,8 +30,20 @@ export function routineEditPatch(title: string, mode: "monthly" | "once", day: n
   };
 }
 
+/** An occurrence can be excluded specifically for date "YYYY-MM-DD". */
+export function isExcluded(r: Routine, d: Date): boolean {
+  const k = dateKey(d);
+  return Array.isArray(r.completed) && (r.completed.includes(`skip:${k}`) || r.completed.includes(`deleted:${k}`));
+}
+
+export function excludeOccurrence(completed: string[], d: Date): string[] {
+  const k = `skip:${dateKey(d)}`;
+  return completed.includes(k) ? completed : [...completed, k];
+}
+
 /** A routine fixed on day N repeats monthly; on short months, days beyond the last day fall on the last day. */
 export function routineOccursOn(r: Routine, d: Date): boolean {
+  if (isExcluded(r, d)) return false;
   if (r.specific_date) return r.specific_date === dateKey(d);
   if (r.day_of_month == null) return false;
   const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();

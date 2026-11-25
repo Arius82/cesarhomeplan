@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { routineOccursOn, routineEditPatch, type Routine } from "./monthly";
+import { routineOccursOn, routineEditPatch, excludeOccurrence, isExcluded, isDone, type Routine } from "./monthly";
 
 const base: Routine = { id: "1", user_name: "Miguel", title: "x", day_of_month: null, specific_date: null, completed: [], updated_at: "" };
 
@@ -18,6 +18,23 @@ describe("rotinas mensais", () => {
     const r = { ...base, specific_date: "2026-11-25" };
     expect(routineOccursOn(r, new Date(2026, 10, 25))).toBe(true);
     expect(routineOccursOn(r, new Date(2026, 11, 25))).toBe(false);
+  });
+  it("permite excluir ocorrência pontual de rotina repetida", () => {
+    const r = { ...base, day_of_month: 15 };
+    const dateNov = new Date(2026, 10, 15);
+    const dateDec = new Date(2026, 11, 15);
+    expect(routineOccursOn(r, dateNov)).toBe(true);
+    expect(routineOccursOn(r, dateDec)).toBe(true);
+
+    // Exclui apenas de novembro
+    const updatedCompleted = excludeOccurrence(r.completed, dateNov);
+    const withSkipped = { ...r, completed: updatedCompleted };
+
+    expect(isExcluded(withSkipped, dateNov)).toBe(true);
+    expect(isExcluded(withSkipped, dateDec)).toBe(false);
+    expect(routineOccursOn(withSkipped, dateNov)).toBe(false);
+    expect(routineOccursOn(withSkipped, dateDec)).toBe(true);
+    expect(isDone(withSkipped, dateNov)).toBe(false);
   });
 });
 

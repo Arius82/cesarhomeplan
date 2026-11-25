@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel } from "@/components/ui/alert-dialog";
-import { dateKey, routineEditPatch, type Routine } from "@/lib/monthly";
+import { dateKey, routineEditPatch, excludeOccurrence, type Routine } from "@/lib/monthly";
 
 type Props = {
   routine: Routine;
@@ -21,6 +21,9 @@ export function RoutineActions({ routine, date, onUpdate, onRemove }: Props) {
   const [mode, setMode] = useState<"monthly" | "once">(routine.specific_date ? "once" : "monthly");
   const [day, setDay] = useState(String(routine.day_of_month ?? date.getDate()));
   const [specificDate, setSpecificDate] = useState(routine.specific_date ?? dateKey(date));
+
+  const isRecurring = !routine.specific_date && routine.day_of_month != null;
+  const dateFormatted = `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`;
 
   const edit = () => {
     setTitle(routine.title);
@@ -40,19 +43,32 @@ export function RoutineActions({ routine, date, onUpdate, onRemove }: Props) {
       }
     } finally { setBusy(false); }
   };
-  const remove = async () => {
+  const removeAll = async () => {
     if (busy) return;
     setBusy(true);
     try {
-      if (await onRemove(routine.id)) setDeleting(false);
+      if (await onRemove(routine.id)) {
+        setDeleting(false);
+      }
+    } finally { setBusy(false); }
+  };
+  const removeOccurrence = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const updatedCompleted = excludeOccurrence(routine.completed, date);
+      if (await onUpdate(routine.id, { completed: updatedCompleted })) {
+        toast.success("Ocorrência excluída com sucesso");
+        setDeleting(false);
+      }
     } finally { setBusy(false); }
   };
 
   return (
     <>
       <div className="flex shrink-0 items-center gap-0.5 no-print">
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={edit} title="Editar rotina mensal" aria-label="Editar rotina mensal"><Pencil /></Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setDeleting(true)} title="Excluir rotina mensal" aria-label="Excluir rotina mensal"><Trash2 /></Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={edit} title="Editar rotina mensal" aria-label="Editar rotina mensal"><Pencil className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setDeleting(true)} title="Excluir rotina mensal" aria-label="Excluir rotina mensal"><Trash2 className="h-4 w-4" /></Button>
       </div>
       <Dialog open={editing} onOpenChange={(open) => { if (!busy) setEditing(open); }}>
         <DialogContent className="no-print max-w-[calc(100%-2rem)] sm:max-w-lg rounded-lg">
@@ -86,14 +102,63 @@ export function RoutineActions({ routine, date, onUpdate, onRemove }: Props) {
         </DialogContent>
       </Dialog>
       <AlertDialog open={deleting} onOpenChange={(open) => { if (!busy) setDeleting(open); }}>
-        <AlertDialogContent className="no-print max-w-[calc(100%-2rem)] sm:max-w-lg rounded-lg">
+        <AlertDialogContent className="no-print max-w-[calc(100%-2rem)] sm:max-w-md rounded-xl">
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir rotina mensal?</AlertDialogTitle>
-            <AlertDialogDescription>Deseja excluir “{routine.title}” de {routine.user_name}? {routine.specific_date ? "Ela será removida do calendário e da semana." : "Ela deixará de aparecer em todos os meses, no calendário e na semana."}</AlertDialogDescription>
+            <AlertDialogDescription className="text-sm">
+              {isRecurring ? (
+                <>
+                  A rotina <strong>“{routine.title}”</strong> se repete todo mês. Deseja apagar somente desta data ou excluir as repetições também?
+                </>
+              ) : (
+                <>
+                  Deseja excluir a rotina <strong>“{routine.title}”</strong> de {routine.user_name}? Ela será removida do calendário e da semana.
+                </>
+              )}
+            </AlertDialogDescription>
           </AlertDialogHeader>
+
+          {isRecurring ? (
+            <div className="flex flex-col gap-2.5 py-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void removeOccurrence()}
+                className="flex flex-col items-start p-3 rounded-lg border border-border hover:bg-muted/70 transition-colors text-left cursor-pointer disabled:opacity-50"
+              >
+                <span className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-primary" />
+                  Apagar somente esta ocorrência ({dateFormatted})
+                </span>
+                <span className="text-xs text-muted-foreground mt-0.5">
+                  Exclui apenas do dia {dateFormatted}. A tarefa continuará repetindo nos outros meses.
+                </span>
+              </button>
+
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void removeAll()}
+                className="flex flex-col items-start p-3 rounded-lg border border-destructive/20 bg-destructive/5 hover:bg-destructive/10 transition-colors text-left cursor-pointer disabled:opacity-50"
+              >
+                <span className="text-sm font-semibold text-destructive flex items-center gap-2">
+                  <Trash2 className="w-4 h-4" />
+                  Excluir todas as repetições
+                </span>
+                <span className="text-xs text-muted-foreground mt-0.5">
+                  Apaga a rotina por completo de todos os meses, no calendário e na semana.
+                </span>
+              </button>
+            </div>
+          ) : null}
+
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
-            <Button variant="destructive" disabled={busy} onClick={() => void remove()}>{busy ? "Excluindo…" : "Excluir"}</Button>
+            {!isRecurring && (
+              <Button variant="destructive" disabled={busy} onClick={() => void removeAll()}>
+                {busy ? "Excluindo…" : "Excluir"}
+              </Button>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
